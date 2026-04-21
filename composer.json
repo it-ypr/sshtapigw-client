@@ -1,0 +1,26 @@
+{
+  "name": "it-ypr/sshtapigw-client",
+  "description": "SDK sshtapigw-client untuk Yii2",
+  "homepage": "https://github.com/it-ypr/sshtapigw-client",
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "ItYpr\\SshtApiGwClient\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=7.4",
+    "guzzlehttp/guzzle": "^7.0"
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "ItYpr\\SshtApiGwClient\\Installer::copyModule"
+    ],
+    "post-update-cmd": [
+      "ItYpr\\SshtApiGwClient\\Installer::copyModule"
+    ]
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
