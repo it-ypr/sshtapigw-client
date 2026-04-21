@@ -33,7 +33,7 @@ php ./vendor/it-ypr/sshtapigw-client/generate.php
 return [
     //...
     'sshtConf' => [
-      'class' => 'common\services\SshtApi\SshtApiCore',
+      'class' => 'common\services\SshtApiGwClient\SshtApiCore',
     ],
     'sshtAPIdb' => [ // db ssht lokal
       'class' => 'yii\db\Connection',
