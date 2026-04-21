@@ -125,8 +125,8 @@ return [
 ### GET using query param:
 
 ```php
-use common\services\SshtApi\SshtApiBase;
-use common\services\SshtApi\SshtApiUrl;
+use common\services\SshtApiGwClient\SshtApiBase;
+use common\services\SshtApiGwClient\SshtApiUrl;
 
 ...
 $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, [
@@ -139,8 +139,8 @@ $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, [
 ### POST using body param:
 
 ```php
-use common\services\SshtApi\SshtApiBase;
-use common\services\SshtApi\SshtApiUrl;
+use common\services\SshtApiGwClient\SshtApiBase;
+use common\services\SshtApiGwClient\SshtApiUrl;
 
 ...
 $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_DATA, [
