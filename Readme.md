@@ -19,7 +19,8 @@ CREATE TABLE `sshtapigw_token` (
 ### 1. Install:
 
 ```sh
-composer require it-ypr/sshtapigw-client
+composer config repositories.sshtapigw-client vcs https://github.com/it-ypr/sshtapigw-client
+composer require it-ypr/sshtapigw-client:^0.1
 ```
 **Generate ./common/services/SshtApiGwClient:**
 
