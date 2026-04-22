@@ -135,6 +135,11 @@ $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, [
       'id' => $idnik,
     ],
 ]);
+
+$resultJson = $response->json() // get result format json 
+$code = $response->getStatusCode(); // 200 - get header status
+$reason = $response->getReasonPhrase(); // OK - get header message
+$result = $response->getBody() // get only body response
 ```
 
 ### POST using body param:
@@ -151,4 +156,13 @@ $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_DATA, [
       'birthdate' => $tgl,
     ],
 ]);
+
+$resultJson = $response->json() // get result format json 
+$code = $response->getStatusCode(); // 200 - get header status
+$reason = $response->getReasonPhrase(); // OK - get header message
+$result = $response->getBody() // get only body response
 ```
+
+## Source:
+
+- [Guzzle-Response](https://docs.guzzlephp.org/en/stable/quickstart.html#using-responses) 
