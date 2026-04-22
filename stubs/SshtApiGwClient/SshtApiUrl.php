@@ -131,9 +131,54 @@ class SshtApiUrl
    * }
    */
   public const ENCOUNTER_CREATE = ['POST', 'ssht/encounter/create'];
-  public const ENCOUNTER_UPDATE = "ssht/encounter/update-patch";
-  public const ENCOUNTER_UPDATE_INPROGRESS = "ssht/encounter/inprogres-update";
-  public const ENCOUNTER_FINISH = "ssht/encounter/finish";
+
+  // public const ENCOUNTER_UPDATE = "ssht/encounter/update-patch";
+  // public const ENCOUNTER_UPDATE_INPROGRESS = "ssht/encounter/inprogres-update";
+
+  /**
+   * Finish Encounter.
+   *
+   * Finish Encounter/Kunjungan
+   * 
+   * Method: POST 
+   * URL: api/v1/ssht/encounter/finish
+   * Body JSON:
+   * {
+   *    "encounter_idIHS": "string|uuid (required) - id encounter"
+   *    "patient_idIHS": "string|max:30 (required) - id pasien"
+   *    "patient_nama": "string|max:255 (required) - nama pasien"
+   *    "practition_idIHS": "string|max:25 (required) - id praktisi/dokter"
+   *    "practition_nama": "string|max:255 (required) - nama praktisi/dokter"
+   *    "location_idIHS": "string|uuid (required) - id lokasi"
+   *    "location_nama": "string|max:255 (required) - nama lokasi"
+   *    "diagnosis": "array|min:1 (required) - daftar diagnosis"
+   *    "diagnosis": [
+   *       {
+   *          "condition_idIHS": "string|uuid (required) - id kondisi"
+   *          "display": "string|max:255 (required) - nama diagnosis"
+   *          "conditionRank": "numeric (required) - urutan primer sekunder [exp: '1']"
+   *       },
+   *       {
+   *          "condition_idIHS": "string|uuid (required) - id kondisi"
+   *          "display": "string|max:255 (required) - nama diagnosis"
+   *          "conditionRank": "numeric (required) - urutan primer sekunder [exp: '2']"
+   *       },
+   *       {
+   *          "condition_idIHS": "string|uuid (required) - id kondisi"
+   *          "display": "string|max:255 (required) - nama diagnosis"
+   *          "conditionRank": "numeric (required) - urutan primer sekunder [exp: '2']"
+   *       }
+   *    ]
+   *    "arrived_start": "string|date (required) - waktu mulai arrived"
+   *    "arrived_end": "string|date (required) - waktu selesai arrived"
+   *    "inprogress_start": "string|date (required) - waktu mulai in progress"
+   *    "inprogress_end": "string|date (required) - waktu selesai in progress"
+   *    "finish_start": "string|date (required) - waktu mulai finish"
+   *    "finish_end": "string|date (required) - waktu selesai finish"
+   *    "class": "string (required) - ralan | igd | ranap"
+   * }
+   */
+  public const ENCOUNTER_FINISH = ['POST', 'ssht/encounter/finish'];
 
   // Condition URL (DIAGNOSA)
   /**
@@ -144,7 +189,7 @@ class SshtApiUrl
    * Query Params:
    * - id (required) : UUID4 - Format (Example: d99eb2ec-889e-80d6-9976-4e0113c5401b)
    */
-  public const CONDITION_GET = "ssht/condition/get";
+  public const CONDITION_GET = ['GET', "ssht/condition/get"];
 
   /**
    * Get Condition by encounter_idIHS.
@@ -180,7 +225,26 @@ class SshtApiUrl
   public const OBSERVATION_GET = "ssht/observation/get";
   public const OBSERVATION_GET_BY_ENCOUNTER = "ssht/observation/get-en";
   // public const OBSERVATION_CREATE = "ssht/observation/";
-  public const OBSERVATION_CREATE_VITAL = "ssht/observation/vital/create";
+
+  /**
+   * Create Observation Vital.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/observation/vital/create
+   * Body JSON:
+   * {
+   *    "encounterIdIHS": "string|uuid (required) - id encounter",
+   *    "obs_name": "string (required) - jenis observasi: nadi | nafas | tdsys | tddias | suhu",
+   *    "obs_value": "string (required) - nilai observasi",
+   *    "patient_idIHS": "string|max:40 (required) - id pasien",,
+   *    "patient_nama": "string|max:60 (required) - nama pasien",
+   *    "practition_idIHS": "string|max:60 (required) - id praktisi/dokter",
+   *    "inprogress_start": "string|date (required) - waktu mulai pemeriksaan",
+   *    "rm": "string (required) - nomor rekam medis",
+   *    "dok": "string (required) - kode/nama dokter"
+   * }
+   */
+  public const OBSERVATION_CREATE_VITAL = ['POST', 'ssht/observation/vital/create'];
   public const OBSERVATION_CREATE_KESADARAN = "ssht/observation/kesadaran/create";
   // public const OBSERVATION_UPDATE = "";
   public const OBSERVATION_UPDATE_VITAL = "ssht/observation/vital/update";
