@@ -13,6 +13,12 @@ use Yii;
 
 class SshtApiClientController extends Controller
 {
+  private $config;
+
+  public function __construct()
+  {
+    $this->config = Yii::$app->params['SSHTApiConfig'] ?? [];
+  }
 
   public function actionSendEncounterRalan($tgl_param) {}
   public function actionSendEncounterUgd($tgl_param) {}
@@ -182,9 +188,9 @@ class SshtApiClientController extends Controller
   public function actionSendImagingStudy($tgl_param)
   {
     $dbLocal = Yii::$app->db;
-    $orthancUrl = "http://your-orthanc-url:8042"; // Sesuaikan URL Orthanc
-    $orthancAuth = ['admin', 'password']; // Sesuaikan user:pass Orthanc
-    $dicomRouterName = "ROUTER_NAME"; // Sesuaikan nama modality di Orthanc
+    $orthancUrl = $this->config["orthanc_url"]; // Sesuaikan URL Orthanc
+    $orthancAuth = [$this->config["orthanc_auth_user"], $this->config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
+    $dicomRouterName = $this->config["dicom_router_name"]; // Sesuaikan nama modality di Orthanc
 
     try {
       // 1. Ambil data Service Request dari DB Lokal

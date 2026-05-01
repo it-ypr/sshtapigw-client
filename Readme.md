@@ -116,6 +116,10 @@ return [
     'client_cert' => '/var/www/certs/client.crt',
     'client_key' => '/var/www/certs/client.key',
     'verify_ssl' => false,
+    'orthanc_url' => 'http://your-orthanc-url:8042',
+    'orthanc_auth_user' => 'ORTHANC_AUTH_USER',
+    'orthanc_auth_password' => 'ORTHANC_AUTH_PASSWORD',
+    'dicom_router_name' => 'DICOM_ROUTER_NAME'
   ],
   // ...
 ];
