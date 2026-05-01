@@ -222,7 +222,7 @@ class SshtApiUrl
   public const CONDITION_UPDATE_RMNDOK = "ssht/condition/get-rmndok";
 
   // Observation
-  public const OBSERVATION_GET = "ssht/observation/get";
+  public const OBSERVATION_GET = ['GET', 'ssht/observation/get'];
   public const OBSERVATION_GET_BY_ENCOUNTER = "ssht/observation/get-en";
   // public const OBSERVATION_CREATE = "ssht/observation/";
 
@@ -246,14 +246,35 @@ class SshtApiUrl
    */
   public const OBSERVATION_CREATE_VITAL = ['POST', 'ssht/observation/vital/create'];
   public const OBSERVATION_CREATE_KESADARAN = "ssht/observation/kesadaran/create";
+
   // public const OBSERVATION_UPDATE = "";
-  public const OBSERVATION_UPDATE_VITAL = "ssht/observation/vital/update";
-  public const OBSERVATION_UPDATE_KESADARAN = "ssht/observation/kesadaran/update";
-  public const OBSERVATION_UPDATE_RMNDOK = "ssht/observation/get-rmndok";
+  // public const OBSERVATION_UPDATE_VITAL = "ssht/observation/vital/update";
+  // public const OBSERVATION_UPDATE_KESADARAN = "ssht/observation/kesadaran/update";
+  // public const OBSERVATION_UPDATE_RMNDOK = "ssht/observation/get-rmndok";
+
+  public const OBSERVATION_CREATE_LAB = "ssht/observation/lab/create";
+  // public const OBSERVATION_UPDATE_LAB = "ssht/observation/lab/update";
+
+  /**
+   * Create Observation Radiologi.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/observation/radio/create
+   * Body JSON:
+   * {
+   *    "servicerequest_idIHS": "string|uuid4 (required) - id servicerequest_idIHS",
+   *    "imagingstudy_idIHS": "string|uuid4 (required) - id imagingstudy_idIHS",
+   *    "rm": "string (required) - nomor rekam medis",
+   *    "valueString": "string (required) - text observasi expertise dokter"
+   * }
+   */
+  public const OBSERVATION_CREATE_RAD = ['POST', 'ssht/observation/radio/create'];
+  // public const OBSERVATION_UPDATE_RAD = ['POST', 'ssht/observation/radio/update'];
 
   // Compostition
   public const COMPOSITION_GET = "ssht/composition/get";
   public const COMPOSITION_CREATE = "ssht/composition/create";
+  public const COMPOSITION_DIET_CREATE = ['POST', 'ssht/composition/create'];
   public const COMPOSITION_UPDATE = "ssht/composition/update";
 
   // Allergy Intolerant
@@ -264,21 +285,79 @@ class SshtApiUrl
   // Service Request
   public const SERVICE_REQUEST_GET = "ssht/service-request/get";
   public const SERVICE_REQUEST_CREATE = "ssht/service-request/create";
+
+  /**
+   * Create ServiceRequest Radiologi.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/service-request/radio/create
+   * Body JSON:
+   * {
+   *    "noradio": "string (required) - nomor radiologi",
+   *    "tagging": "string (required) - tagging data radiologi",
+   *    "loinc": "string (required) - kode LOINC",
+   *    "id": "string|uuid (required) - id service request",
+   *    "category": "string (required) - kategori enum (lab, radio, konsul, edukasi, operasi, rujukan, ekg, eco, nebulasi)",
+   *    "reason": "string (required) - alasan pemeriksaan",
+   *    "encounter_idIHS": "string|uuid (required) - id encounter",
+   *    "dokter": "string (required) - nama/kode dokter",
+   *    "rm": "string (required) - nomor rekam medis",
+   *    "petugas_idIHS": "string (required) - id petugas",
+   *    "petugas_nama": "string (required) - nama petugas"
+   * }
+   */
+  public const SERVICE_REQUEST_CREATE_RAD = ['POST', 'ssht/service-request/create'];
   public const SERVICE_REQUEST_UPDATE = "ssht/service-request/update";
+
+  // ImagingStudy
+  /**
+   * Get Imaging by Date.
+   * 
+   * Method: GET
+   * URL: api/v1/ssht/imaging/get-bydate
+   * Query Params:
+   * - date (required) : YYYY-MM-DD - Format (Example: '2026-04-23')
+   */
+  public const IMAGINGSTUDY_GET_BYDATE = ['GET', 'ssht/imaging/get-bydate'];
+
+  /**
+   * Get Imaging Detail
+   * 
+   * Method: GET
+   * URL: api/v1/ssht/imaging/get
+   * Query Params:
+   * - id (required) : UUID4 - Format (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')
+   */
+  public const IMAGINGSTUDY_GET = ['GET', 'ssht/imaging/get'];
 
   // Speciment
   public const SPECIMENT_GET = "ssht/speciment/get";
   public const SPECIMENT_CREATE = "ssht/speciment/create";
   public const SPECIMENT_UPDATE = "ssht/speciment/update";
 
-  // Observation
-  public const OBSERVATION_CREATE_LAB = "ssht/lab-obs/create";
-  public const OBSERVATION_UPDATE_LAB = "ssht/lab-obs/update";
-  public const OBSERVATION_GET_LAB = "ssht/lab-obs/get";
 
   // Diagnostic Report
   public const DIAGNOSTIC_REPORT_GET = "";
   public const DIAGNOSTIC_REPORT_CREATE = "";
+
+
+  // "servicerequest_idIHS" => "required|string|uuid",
+  // "value" => "required|string",
+  // "noradio" => "required|string",
+
+  /**
+   * Create DiagnosticReport Radiologi.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/diagnostic-report/radio/create
+   * Body JSON:
+   * {
+   *    "servicerequest_idIHS": "string|uuid4 (required) - (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')",
+   *    "value": "string (required) - text expertise dokter radio (kesan)",
+   *    "noradio": "string|numeric (required) - noradio"
+   * }
+   */
+  public const DIAGNOSTIC_REPORT_CREATE_RAD = ['POST', 'ssht/diagnostic-report/radio/create'];
   public const DIAGNOSTIC_REPORT_UPDATE = "";
 
   // Procedure
