@@ -11,7 +11,8 @@
   },
   "require": {
     "php": ">=7.4",
-    "guzzlehttp/guzzle": "^7.0"
+    "guzzlehttp/guzzle": "^7.0",
+    "jstewmc/rtf": "^0.5"
   },
   "scripts": {
     "post-install-cmd": [
