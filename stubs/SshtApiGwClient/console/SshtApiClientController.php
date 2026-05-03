@@ -20,7 +20,185 @@ class SshtApiClientController extends Controller
     $this->config = Yii::$app->params['SSHTApiConfig'] ?? [];
   }
 
-  public function actionSendEncounterRalan($tgl_param) {}
+  private function fetchDataSimrs($date)
+  {
+    // Mereplikasi logic subquery Laravel kamu
+    $subQuery = (new Query())
+      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
+      ->from('mr_periksa_poli')
+      ->where(['like', 'tanggal', $date])
+      ->groupBy('Id');
+
+    return (new Query())
+      ->select([
+        'tblnew.rm',
+        'TRIM(mr_ktp.ktp) as ktp',
+        'TRIM(mmr.nama) as pasien_nama',
+        'TRIM(muser.nm_user) as dokter_nama',
+        'muser.idssht as dokter_ihs',
+        'mpoli.idihs as lokasi_ihs',
+        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) SEPARATOR ';') as icd_codes",
+        'MIN(tblnew.tglperiksa) as a_end',
+        'MAX(tblnew.resep) as p_rawend'
+      ])
+      ->from(['tblnew' => $subQuery])
+      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
+      ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
+      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
+      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
+      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
+      ->where(['like', 'tblnew.tglperiksa', $date . '%'])
+      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
+      ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74']]) // Filter poli
+      ->andWhere(['not', ['muser.idssht' => null]])
+      ->groupBy('tblnew.rm')
+      ->all(\Yii::$app->db1); // Asumsi db2 adalah koneksi SIMRS
+  }
+
+  private function parseIcdCodes($rawCodes)
+  {
+    if (empty($rawCodes)) return [];
+
+    $mapping = [
+      "R50.0" => "R50",
+      // "A01.0" => "A01",
+      // "Z00.0" => "Z00",
+    ];
+
+    $codes = explode(';', $rawCodes);
+    $result = [];
+
+    foreach ($codes as $c) {
+      $clean = preg_replace('/[^.;a-zA-Z0-9]/', '', $c);
+      if (!$clean) continue;
+
+      // Cek apakah ada di dictionary mapping
+      if (isset($mapping[$clean])) {
+        $clean = $mapping[$clean];
+      }
+
+      $result[] = [
+        'code' => $clean,
+        'display' => $this->getIcdDisplay($clean)
+      ];
+    }
+
+    // Filter kode double (Unique)
+    return array_values(array_column($result, null, 'code'));
+  }
+
+  private function generateEncounterTimes($a_end)
+  {
+    $ts_end = strtotime($a_end);
+    $ts_arrived = $ts_end - (rand(15, 30) * 60); // Datang 15-30 mnt sebelumnya
+    $ts_inprogress = $ts_end - (rand(5, 10) * 60); // Mulai diperiksa 5-10 mnt sebelum selesai
+
+    return [
+      'arrived_at' => date('Y-m-d H:i:s', $ts_arrived),
+      'inprogress_at' => date('Y-m-d H:i:s', $ts_inprogress),
+      'inprogress_end' => date('Y-m-d H:i:s', $ts_end),
+    ];
+  }
+
+  private function getIcdDisplay($code)
+  {
+    // Dummy display, bisa diganti query ke table master ICD10
+    return "Diagnosis " . $code;
+  }
+
+  public function actionSendEncounterRalan($tgl_param)
+  {
+    echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
+
+    // 1. Ambil data dari SIMRS (Repolusi dari Laravel Query)
+    $dataEncounter = $this->fetchDataSimrs($tgl_param);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      return ExitCode::OK;
+    }
+
+    foreach ($dataEncounter as $row) {
+      try {
+        echo "\nProcessing RM: {$row['rm']}...";
+
+        // 2. Get IHS Pasien via KTP (Wrapper)
+        $ktp = preg_replace('/\D/', '', $row['ktp']);
+        $resPatient = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, ['query' => ['id' => $ktp]]);
+
+        sleep(1);
+
+        $pasienIhs = $resPatient['data']['idIHS'] ?? null;
+
+        if (!$pasienIhs) {
+          echo " SKIPPED (IHS Pasien tidak ditemukan)";
+          continue;
+        }
+
+        // 3. Get Nama Lokasi (Wrapper)
+        $resLocation = SshtApiBase::request(SshtApiUrl::LOCATION_GET_BY_IHS, ['query' => ['id' => $row['lokasi_ihs']]]);
+        $locationNama = $resLocation['name'] ?? 'Poliklinik';
+
+        // 4. Generate Waktu (Format SQL: YYYY-MM-DD HH:mm:ss)
+        $times = $this->generateEncounterTimes($row['a_end']);
+
+        // 5. SEND ENCOUNTER (Sesuai Body JSON Gateway kamu)
+        $payloadEncounter = [
+          "pasien_idIHS" => $pasienIhs,
+          "pasien_nama" => $row['pasien_nama'],
+          "pasien_rm" => $row['rm'],
+          "practitioner_idIHS" => $row['dokter_ihs'],
+          "practitioner_nama" => $row['dokter_nama'],
+          "location_idIHS" => $row['lokasi_ihs'],
+          "location_nama" => $locationNama,
+          "location_poli" => $row['poli'],
+          "arrived_at" => $times['arrived_at'],
+          "inprogress_at" => $times['inprogress_at'],
+          "class" => "ralan"
+        ];
+
+        $resEnc = SshtApiBase::request(SshtApiUrl::ENCOUNTER_CREATE, ['json' => $payloadEncounter]);
+        $encounterIhsId = $resEnc['idIHS'] ?? null;
+
+        sleep(1);
+
+        if ($encounterIhsId) {
+          echo " SUCCESS ENCOUNTER: $encounterIhsId\n";
+
+          // 6. SEND CONDITION (Looping ICD10)
+          $icdList = $this->parseIcdCodes($row['icd_codes']);
+
+          foreach ($icdList as $icd) {
+            $payloadCondition = [
+              "encounter_idIHS" => $encounterIhsId,
+              "patient_idIHS" => $pasienIhs,
+              "patient_nama" => $row['pasien_nama'],
+              "conditionCode" => $icd['code'],
+              "conditionName" => $icd['display'],
+              "inprogress_start" => $times['inprogress_at'],
+              "inprogress_end" => $times['inprogress_end']
+            ];
+
+            $resCond = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
+            sleep(2);
+            echo "   > Condition OK: " . ($resCond['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
+          }
+        } else {
+          echo " FAILED ENCOUNTER";
+          sleep(2);
+        }
+      } catch (\Exception $e) {
+        echo " ERROR: " . $e->getMessage() . "\n";
+        sleep(5);
+      }
+      // jeda rate limit gateway
+      sleep(2);
+    }
+
+    echo "\n--- TASK BOT DONE ---\n";
+    return ExitCode::OK;
+  }
+
   public function actionSendEncounterUgd($tgl_param) {}
   public function actionSendEncounterRanap($tgl_param) {}
   public function actionSendEncounterFinish($tgl_param) {}
@@ -282,8 +460,8 @@ class SshtApiClientController extends Controller
    */
   public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
   {
-    $dbLocal = Yii::$app->db;
-    $dbSimrs = Yii::$app->dbSimrs;
+    $dbLocal = Yii::$app->sshtAPIdb;
+    $dbSimrs = Yii::$app->db1;
 
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
