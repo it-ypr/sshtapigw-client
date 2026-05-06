@@ -13,13 +13,6 @@ use Yii;
 
 class SshtApiClientController extends Controller
 {
-  private $config;
-
-  public function __construct()
-  {
-    $this->config = Yii::$app->params['SSHTApiConfig'] ?? [];
-  }
-
   private function fetchDataSimrs($date)
   {
     // Mereplikasi logic subquery Laravel kamu
@@ -29,7 +22,7 @@ class SshtApiClientController extends Controller
       ->where(['like', 'tanggal', $date])
       ->groupBy('Id');
 
-    return (new Query())
+    $query = (new Query())
       ->select([
         'tblnew.rm',
         'TRIM(mr_ktp.ktp) as ktp',
@@ -47,12 +40,15 @@ class SshtApiClientController extends Controller
       ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
       ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
       ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where(['like', 'tblnew.tglperiksa', $date . '%'])
+      ->where(['like', 'tblnew.tglperiksa', $date . '%', false])
+      ->andWhere(['like', 'mr_kunjungan.tanggal', $date . '%', false])
       ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
       ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74']]) // Filter poli
       ->andWhere(['not', ['muser.idssht' => null]])
       ->groupBy('tblnew.rm')
       ->all(\Yii::$app->db1); // Asumsi db2 adalah koneksi SIMRS
+
+    return $query;
   }
 
   private function parseIcdCodes($rawCodes)
@@ -106,7 +102,7 @@ class SshtApiClientController extends Controller
     return "Diagnosis " . $code;
   }
 
-  public function actionSendEncounterRalan($tgl_param)
+  public function actionSendEncounterRalan($tgl_param): void
   {
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
 
@@ -115,7 +111,7 @@ class SshtApiClientController extends Controller
 
     if (empty($dataEncounter)) {
       echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
-      return ExitCode::OK;
+      // return ExitCode::OK;
     }
 
     foreach ($dataEncounter as $row) {
@@ -196,7 +192,7 @@ class SshtApiClientController extends Controller
     }
 
     echo "\n--- TASK BOT DONE ---\n";
-    return ExitCode::OK;
+    // return ExitCode::OK;
   }
 
   public function actionSendEncounterUgd($tgl_param) {}
@@ -365,10 +361,13 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudy($tgl_param)
   {
+    $config = SshtApiBase::getConfig();
+
     $dbLocal = Yii::$app->db;
-    $orthancUrl = $this->config["orthanc_url"]; // Sesuaikan URL Orthanc
-    $orthancAuth = [$this->config["orthanc_auth_user"], $this->config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
-    $dicomRouterName = $this->config["dicom_router_name"]; // Sesuaikan nama modality di Orthanc
+
+    $orthancUrl = $config["orthanc_url"]; // Sesuaikan URL Orthanc
+    $orthancAuth = [$config["orthanc_auth_user"], $config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
+    $dicomRouterName = $config["dicom_router_name"]; // Sesuaikan nama modality di Orthanc
 
     try {
       // 1. Ambil data Service Request dari DB Lokal

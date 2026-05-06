@@ -25,4 +25,9 @@ class SshtApiBase
   {
     return SshtApiCore::getInstance()->request($apiUrlConstant, $options);
   }
+
+  public static function getConfig()
+  {
+    return SshtApiCore::getInstance()->getConfig();
+  }
 }

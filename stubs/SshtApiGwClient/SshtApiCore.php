@@ -172,6 +172,11 @@ class SshtApiCore extends Component implements SshtApiRepository
     }
   }
 
+  public function getConfig()
+  {
+    return $this->config;
+  }
+
   public function module()
   {
     return (new \ReflectionClass(\common\services\SshtApiGwClient\SshtApiUrl::class))->getConstants();
