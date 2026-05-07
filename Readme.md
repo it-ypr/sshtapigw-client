@@ -20,7 +20,7 @@ CREATE TABLE `sshtapigw_token` (
 
 ```sh
 composer config repositories.sshtapigw-client vcs https://github.com/it-ypr/sshtapigw-client
-composer require it-ypr/sshtapigw-client:^0.1
+composer require it-ypr/sshtapigw-client:^0.3
 ```
 **Generate ./common/services/SshtApiGwClient:**
 
@@ -45,6 +45,13 @@ return [
       'password' => 'PASSWORD_NYA',
       'charset' => 'utf8',
     ],
+    'db_terminologi' => [ // db terminologi untuk icd10 etc..
+      'class' => 'yii\db\Connection',
+      'dsn' => 'mysql:host=localhost;dbname=satusehat_terminologi',
+      'username' => 'USERNAME_DB_NYA',
+      'password' => 'PASSWORD_NYA',
+      'charset' => 'utf8',
+    ],
    // ...
 ];
 ```
@@ -64,8 +71,33 @@ return [
     'client_cert' => '/var/www/certs/client.crt',
     'client_key' => '/var/www/certs/client.key',
     'verify_ssl' => false,
+    'orthanc_url' => 'http://your-orthanc-url:8042',
+    'orthanc_auth_user' => 'ORTHANC_AUTH_USER',
+    'orthanc_auth_password' => 'ORTHANC_AUTH_PASSWORD',
+    'dicom_router_name' => 'dicom-router'
   ],
   // ...
+];
+```
+
+### 4. Copy this part to ./console/config/main.php
+
+```php
+<?php
+
+...
+
+return [
+  ...
+  'controllerMap' => [
+    ...
+    'ssht-api-client' => [
+      'class' => 'common\services\SshtApiGwClient\console\SshtApiClientController',
+      // 'namespace' => 'common\services\SshtApiGwClient\console',
+    ],
+    ...
+  ],
+  ...
 ];
 ```
 
@@ -119,7 +151,7 @@ return [
     'orthanc_url' => 'http://your-orthanc-url:8042',
     'orthanc_auth_user' => 'ORTHANC_AUTH_USER',
     'orthanc_auth_password' => 'ORTHANC_AUTH_PASSWORD',
-    'dicom_router_name' => 'DICOM_ROUTER_NAME'
+    'dicom_router_name' => 'dicom-router'
   ],
   // ...
 ];
@@ -140,10 +172,13 @@ $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, [
     ],
 ]);
 
-$resultJson = $response->json() // get result format json 
+// $resultJson = $response->json(); // get result format json (DEPRECATED: only work on guzzle v5)
 $code = $response->getStatusCode(); // 200 - get header status
 $reason = $response->getReasonPhrase(); // OK - get header message
 $result = $response->getBody() // get only body response
+$resultArray = json_decode((string) $result, true)
+// or
+$resultToArray = json_decode((string) $response->getBody(), true);
 ```
 
 ### POST using body param:
@@ -161,10 +196,19 @@ $response = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_DATA, [
     ],
 ]);
 
-$resultJson = $response->json() // get result format json 
+// $resultJson = $response->json(); // get result format json (DEPRECATED: only work on guzzle v5)
 $code = $response->getStatusCode(); // 200 - get header status
 $reason = $response->getReasonPhrase(); // OK - get header message
 $result = $response->getBody() // get only body response
+$resultArray = json_decode((string)$result, true);
+// or
+$resultToArray = json_decode((string) $response->getBody(), true);
+```
+
+### Run console command:
+
+```sh
+php yii ssht-api-client/test-hello 
 ```
 
 ## Source:

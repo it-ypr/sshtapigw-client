@@ -13,42 +13,28 @@ use Yii;
 
 class SshtApiClientController extends Controller
 {
-  private function fetchDataSimrs($date)
+  // private $config;
+
+  // public function __construct()
+  // {
+  //   $this->config = Yii::$app->params['SSHTApiConfig'] ?? [];
+  // }
+
+  // public function init()
+  // {
+  //   parent::init();
+  //   $this->config = \Yii::$app->params['SSHTApiConfig'] ?? [];
+  // }
+
+  /**
+   * php yii ssht-api-client/test-hello 
+   */
+  public function actionTestHello()
   {
-    // Mereplikasi logic subquery Laravel kamu
-    $subQuery = (new Query())
-      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
-      ->from('mr_periksa_poli')
-      ->where(['like', 'tanggal', $date])
-      ->groupBy('Id');
-
-    $query = (new Query())
-      ->select([
-        'tblnew.rm',
-        'TRIM(mr_ktp.ktp) as ktp',
-        'TRIM(mmr.nama) as pasien_nama',
-        'TRIM(muser.nm_user) as dokter_nama',
-        'muser.idssht as dokter_ihs',
-        'mpoli.idihs as lokasi_ihs',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) SEPARATOR ';') as icd_codes",
-        'MIN(tblnew.tglperiksa) as a_end',
-        'MAX(tblnew.resep) as p_rawend'
-      ])
-      ->from(['tblnew' => $subQuery])
-      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
-      ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
-      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
-      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
-      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where(['like', 'tblnew.tglperiksa', $date . '%', false])
-      ->andWhere(['like', 'mr_kunjungan.tanggal', $date . '%', false])
-      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
-      ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74']]) // Filter poli
-      ->andWhere(['not', ['muser.idssht' => null]])
-      ->groupBy('tblnew.rm')
-      ->all(\Yii::$app->db1); // Asumsi db2 adalah koneksi SIMRS
-
-    return $query;
+    $config = SshtApiBase::getConfig();
+    echo "Hi.. \n";
+    echo "config load: \n" . json_encode($config) . "\n";
+    // return ExitCode::OK;
   }
 
   private function parseIcdCodes($rawCodes)
@@ -57,30 +43,31 @@ class SshtApiClientController extends Controller
 
     $mapping = [
       "R50.0" => "R50",
-      // "A01.0" => "A01",
-      // "Z00.0" => "Z00",
+      "A01.0" => "A01",
+      "Z00.0" => "Z00",
     ];
 
     $codes = explode(';', $rawCodes);
-    $result = [];
+    $normalizedCodes = [];
 
     foreach ($codes as $c) {
-      $clean = preg_replace('/[^.;a-zA-Z0-9]/', '', $c);
+      $clean = trim(preg_replace('/[^a-zA-Z0-9.]/', '', $c));
       if (!$clean) continue;
 
-      // Cek apakah ada di dictionary mapping
       if (isset($mapping[$clean])) {
         $clean = $mapping[$clean];
       }
-
-      $result[] = [
-        'code' => $clean,
-        'display' => $this->getIcdDisplay($clean)
-      ];
+      $normalizedCodes[] = $clean;
     }
 
-    // Filter kode double (Unique)
-    return array_values(array_column($result, null, 'code'));
+    $uniqueCodes = array_unique($normalizedCodes);
+
+    // Query menggunakan database terminologi
+    return (new \yii\db\Query())
+      ->select(['icd10_code as code', 'icd10_en as display'])
+      ->from('icd10')
+      ->where(['icd10_code' => $uniqueCodes])
+      ->all(\Yii::$app->dbsshtterminologi);
   }
 
   private function generateEncounterTimes($a_end)
@@ -96,35 +83,131 @@ class SshtApiClientController extends Controller
     ];
   }
 
-  private function getIcdDisplay($code)
-  {
-    // Dummy display, bisa diganti query ke table master ICD10
-    return "Diagnosis " . $code;
-  }
-
-  public function actionSendEncounterRalan($tgl_param): void
+  /**
+   * php yii ssht-api-client/send-encounter-ralan 2026-05-01
+   */
+  public function actionSendEncounterRalan($tgl_param)
   {
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
 
-    // 1. Ambil data dari SIMRS (Repolusi dari Laravel Query)
-    $dataEncounter = $this->fetchDataSimrs($tgl_param);
+    $subQuery = (new Query())
+      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
+      ->from('mr_periksa_poli')
+      ->where("tanggal LIKE '$tgl_param%'")
+      // ->where(['like', 'tanggal', $tgl_param . '%', false])
+      ->groupBy('Id');
+
+    $dataEncounter = (new Query())
+      ->select([
+        'tblnew.rm',
+        'TRIM(mr_ktp.ktp) as ktp',
+        'TRIM(mmr.nama) as pasien_nama',
+        'tblnew.dokter',
+        'TRIM(muser.nm_user) as dokter_nama',
+        'muser.idssht as dokter_ihs',
+        'mpoli.idihs as lokasi_ihs',
+        'tblnew.poli as poli',
+        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) SEPARATOR ';') as icd_codes",
+        'MIN(tblnew.tglperiksa) as a_end',
+        'MAX(tblnew.resep) as p_rawend'
+      ])
+      ->from(['tblnew' => $subQuery])
+      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
+      ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
+      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
+      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
+      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
+      ->where("tblnew.tglperiksa LIKE '$tgl_param%'")
+      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
+      ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
+      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
+      ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74', '29']]) // Filter poli
+      ->andWhere(['not', ['muser.idssht' => null]])
+      ->groupBy('tblnew.rm')
+      ->all(\Yii::$app->db); // Asumsi db2 adalah koneksi SIMRS
 
     if (empty($dataEncounter)) {
       echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
       // return ExitCode::OK;
     }
 
+    echo "Ditemukan " . count($dataEncounter) . " data.\n";
+    // print_r($dataEncounter);
+
+    // foreach ($dataEncounter as $key => $row) {
+    //   echo "data ke-" . $key;
+    //   echo $row;
+    // }
+
+    // // 2026-05-06 12:03 - Testing payload testdata
+    // $testdata1 = $dataEncounter[0];
+    //
+    // print_r($testdata1);
+    //
+    // $ktp = preg_replace('/\D/', '', $testdata1['ktp']);
+    // $resPatient = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, ['query' => ['id' => $ktp]]);
+    // sleep(1);
+    // $resPatientReq = json_decode((string) $resPatient->getBody(), true);
+    // $pasienIhs = $resPatientReq['data']['idIHS'] ?? null;
+    // print_r($pasienIhs);
+    // $resLocation = SshtApiBase::request(SshtApiUrl::LOCATION_GET_BY_IHS, ['query' => ['id' => $testdata1['lokasi_ihs']]]);
+    // $locationNamaReq = json_decode((string) $resLocation->getBody(), true);
+    // print_r($locationNamaReq);
+    // $locationNama = $locationNamaReq['data']['nama'] ?? 'Poliklinik';
+    // print_r($locationNama);
+    //
+    // // 4. Generate Waktu (Format SQL: YYYY-MM-DD HH:mm:ss)
+    // $times = $this->generateEncounterTimes($testdata1['a_end']);
+    //
+    // $payloadEncounter = [
+    //   "pasien_idIHS" => $pasienIhs,
+    //   "pasien_nama" => $testdata1['pasien_nama'],
+    //   "pasien_rm" => $testdata1['rm'],
+    //   "practitioner_idIHS" => $testdata1['dokter_ihs'],
+    //   "practitioner_nama" => $testdata1['dokter_nama'],
+    //   "location_idIHS" => $testdata1['lokasi_ihs'],
+    //   "location_nama" => $locationNama,
+    //   "location_poli" => $testdata1['poli'],
+    //   "arrived_at" => $times['arrived_at'],
+    //   "inprogress_at" => $times['inprogress_at'],
+    //   "class" => "ralan"
+    // ];
+    //
+    // echo "\nPayload EncounterRalanTest: " . json_encode($payloadEncounter) . "\n";
+    //
+    // $icdList = $this->parseIcdCodes($testdata1['icd_codes']);
+    //
+    // echo "\nicd10List parse: " . json_encode($icdList) . "\n";
+    //
+    // foreach ($icdList as $icd) {
+    //   $payloadCondition = [
+    //     "encounter_idIHS" => "xxxx",
+    //     "patient_idIHS" => $pasienIhs,
+    //     "patient_nama" => $testdata1['pasien_nama'],
+    //     "conditionCode" => $icd['code'],
+    //     "conditionName" => $icd['display'],
+    //     "inprogress_start" => $times['inprogress_at'],
+    //     "inprogress_end" => $times['inprogress_end']
+    //   ];
+    //   echo "\nPayload test untuk Condition/Diagnosa: " . json_encode($payloadCondition) . "\n";
+    // }
+
+    // 2026-05-05 06:45 - disable coba query dulu..
+    // 2026-05-06 12:04 - test kirim data
     foreach ($dataEncounter as $row) {
       try {
         echo "\nProcessing RM: {$row['rm']}...";
 
         // 2. Get IHS Pasien via KTP (Wrapper)
         $ktp = preg_replace('/\D/', '', $row['ktp']);
+
         $resPatient = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, ['query' => ['id' => $ktp]]);
+        $resPatientReq = json_decode((string) $resPatient->getBody(), true);
 
         sleep(1);
 
-        $pasienIhs = $resPatient['data']['idIHS'] ?? null;
+        $pasienIhs = $resPatientReq['data']['idIHS'] ?? null;
+        // $pasienIhs = $resPatient['data']['idIHS'] ?? null;
 
         if (!$pasienIhs) {
           echo " SKIPPED (IHS Pasien tidak ditemukan)";
@@ -133,7 +216,9 @@ class SshtApiClientController extends Controller
 
         // 3. Get Nama Lokasi (Wrapper)
         $resLocation = SshtApiBase::request(SshtApiUrl::LOCATION_GET_BY_IHS, ['query' => ['id' => $row['lokasi_ihs']]]);
-        $locationNama = $resLocation['name'] ?? 'Poliklinik';
+
+        $locationNamaReq = json_decode((string) $resLocation->getBody(), true);
+        $locationNama = $locationNamaReq['data']['nama'] ?? 'Poliklinik';
 
         // 4. Generate Waktu (Format SQL: YYYY-MM-DD HH:mm:ss)
         $times = $this->generateEncounterTimes($row['a_end']);
@@ -153,31 +238,72 @@ class SshtApiClientController extends Controller
           "class" => "ralan"
         ];
 
-        $resEnc = SshtApiBase::request(SshtApiUrl::ENCOUNTER_CREATE, ['json' => $payloadEncounter]);
-        $encounterIhsId = $resEnc['idIHS'] ?? null;
+        $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_CREATE, ['json' => $payloadEncounter]);
+        $resEnc = json_decode((string) $resEncReq->getBody(), true);
+        $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
 
         sleep(1);
 
         if ($encounterIhsId) {
           echo " SUCCESS ENCOUNTER: $encounterIhsId\n";
+          // Ambil data hasil wrap gateway
+          $encData = $resEnc['data'];
+
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
+            'idIHS'              => $encData['idIHS'],
+            'subject_rm'         => $encData['subject_rm'],
+            'subject_idIHS'      => $encData['subject_idIHS'],
+            'subject_nama'       => $encData['subject_nama'],
+            'practition_idIHS'   => $encData['practition_idIHS'],
+            'practition_lokalid' => $row['dokter'], // Ambil dari data lokal SIMRS kamu
+            'practition_nama'    => $encData['practition_nama'],
+            'location_idIHS'     => $encData['location_idIHS'],
+            'location_nama'      => $encData['location_nama'],
+            'organization_idIHS'  => $encData['organization_idIHS'],
+            'arrived_start'      => $encData['arrived_at'],
+            'arrived_end'        => $encData['arrived_end'],
+            'inprogress_start'   => $encData['inprogress_start'],
+            'inprogress_end'     => $times['inprogress_end'], // dari generator lokal
+            'created_at'         => date('Y-m-d H:i:s'),
+            'updated_at'         => date('Y-m-d H:i:s'),
+            'class'              => $encData['class'],
+          ])->execute();
 
           // 6. SEND CONDITION (Looping ICD10)
           $icdList = $this->parseIcdCodes($row['icd_codes']);
 
-          foreach ($icdList as $icd) {
+          foreach ($icdList as $key => $icd) {
             $payloadCondition = [
               "encounter_idIHS" => $encounterIhsId,
               "patient_idIHS" => $pasienIhs,
               "patient_nama" => $row['pasien_nama'],
               "conditionCode" => $icd['code'],
               "conditionName" => $icd['display'],
-              "inprogress_start" => $times['inprogress_at'],
+              "inprogress_start" => $encData['inprogress_start'],
               "inprogress_end" => $times['inprogress_end']
             ];
 
-            $resCond = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
+            $resCondReq = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
             sleep(2);
-            echo "   > Condition OK: " . ($resCond['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
+            $resCond = json_decode((string)$resCondReq->getBody(), true);
+            $conditionIhsId = $resCond['data']['idIHS'] ?? null;
+
+            if ($conditionIhsId) {
+              $condData = $resCond['data'];
+
+              \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
+                'condition_idIHS' => $conditionIhsId,
+                'encounter_idIHS' => $encounterIhsId,
+                'conditionRank'   => ($key == 0) ? 1 : 2,
+                'code'            => $icd['code'],
+                'display'         => $icd['display'],
+                'rm'              => $row['rm'],
+                'dok'             => $row['dokter'],
+                'created_at'      => date('Y-m-d H:i:s'),
+                'updated_at'      => date('Y-m-d H:i:s'),
+              ])->execute();
+            }
+            echo "   > Condition OK: " . ($condData['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
           }
         } else {
           echo " FAILED ENCOUNTER";
@@ -196,10 +322,15 @@ class SshtApiClientController extends Controller
   }
 
   public function actionSendEncounterUgd($tgl_param) {}
-  public function actionSendEncounterRanap($tgl_param) {}
+  public function actionSendEncounterRanap($tgl_param)
+  {
+    echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
+    echo "\n--- TASK BOT DONE ---\n";
+  }
+
   public function actionSendEncounterFinish($tgl_param) {}
 
-  public function actionSendCondition($tgl_param) {}
+  // public function actionSendCondition($tgl_param) {}
 
   public function actionSendObservationVitalTd($tgl_param) {}
 
@@ -229,7 +360,7 @@ class SshtApiClientController extends Controller
   public function actionSendServiceRequestRadio($tgl_param)
   {
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db1; // dbSimrs
+    $dbSimrs = Yii::$app->db; // dbSimrs
 
     try {
       // 1. Ambil data encounter dari DB Lokal
@@ -256,7 +387,6 @@ class SshtApiClientController extends Controller
             'rd_biodata.dkirim',
             'trim(rd_biodata.dperiksa) as dperiksa',
             'muser.nm_user',
-            'muser.idssht',
             'rd_daftar_periksa.loinc'
           ])
           ->from('rd_order_poli')
@@ -281,7 +411,6 @@ class SshtApiClientController extends Controller
           "noradio" => $simrs['noradio'],
           "tagging" => $simrs['kode'],
           "loinc" => $simrs['loinc'] ?? "",
-          "id" => "", // Kosongkan jika memang generate di gateway
           "category" => "radio",
           "reason" => $simrs['indikasi'] ?: "Permintaan Radiologi",
           "encounter_idIHS" => $enc['idIHS'],
@@ -313,7 +442,7 @@ class SshtApiClientController extends Controller
           ['json' => $payload]
         );
 
-        $result = $response->getBody();
+        $result = json_decode((string) $response->getBody(), true);
 
         if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
           $data_api = $result['data'] ?? [];
@@ -361,10 +490,8 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudy($tgl_param)
   {
+    $dbLocal = Yii::$app->sshtAPIdb;
     $config = SshtApiBase::getConfig();
-
-    $dbLocal = Yii::$app->db;
-
     $orthancUrl = $config["orthanc_url"]; // Sesuaikan URL Orthanc
     $orthancAuth = [$config["orthanc_auth_user"], $config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
     $dicomRouterName = $config["dicom_router_name"]; // Sesuaikan nama modality di Orthanc
@@ -460,7 +587,7 @@ class SshtApiClientController extends Controller
   public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
   {
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db1;
+    $dbSimrs = Yii::$app->db;
 
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
@@ -470,7 +597,8 @@ class SshtApiClientController extends Controller
         'query' => ['date' => $tgl_param]
       ]);
 
-      $items = $respImaging->getBody()['data'] ?? [];
+      $respImagingReq = json_decode((string) $respImaging->getBody());
+      $items = isset($respImagingReq['data']) ? $respImagingReq['data'] : [];
       $this->stdout("[*] Menemukan " . count($items) . " data untuk diproses.\n");
 
       foreach ($items as $master) {
@@ -482,7 +610,8 @@ class SshtApiClientController extends Controller
           $respDetail = SshtApiBase::request(SshtApiUrl::IMAGINGSTUDY_GET, [
             'query' => ['id' => $imgIdIhs]
           ]);
-          $detailData = $respDetail->getBody()['data'] ?? null;
+          $respDetailReq = json_decode((string) $respDetail->getBody(), true);
+          $detailData = isset($respDetailReq['data']) ? $respDetailReq['data'] : null;
           if (!$detailData) continue;
 
           $srIdIhs = $detailData['servicerequest_idIHS'];
@@ -530,7 +659,8 @@ class SshtApiClientController extends Controller
               ]);
 
               if ($resO->getStatusCode() == 200 || $resO->getStatusCode() == 201) {
-                $resDataO = $resO->getBody()['data'] ?? [];
+                $resDataOReq = json_decode((string) $resO->getBody(), true);
+                $resDataO = isset($resDataOReq['data']) ? $resDataOReq['data'] : [];
                 $dbLocal->createCommand()->insert('ssht_observation', [
                   'observation_idIHS' => $resDataO['observation_idIHS'],
                   'encounter_idIHS' => $resDataO['encounter_idIHS'],
@@ -572,7 +702,8 @@ class SshtApiClientController extends Controller
               ]);
 
               if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
-                $resDataR = $resR->getBody()['data'] ?? [];
+                $resDataRReq = json_decode((string) $resR->getBody(), true);
+                $resDataR = isset($resDataRReq['data']) ? $resDataRReq['data'] : [];
                 $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
                   'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
                   'encounter_idIHS' => $resDataR['encounter_idIHS'],
