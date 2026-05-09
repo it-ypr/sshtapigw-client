@@ -65,6 +65,7 @@ return [
 return [
   // ...
   'SSHTApiConfig' => [
+    'debug' => true, // debug mode = true/false
     'baseurl' => 'SSHTAPIGW_BASE_URL',
     'email' => 'SSHTAPIGW_EMAIL',
     'password' => 'SSHTAPIGW_PASSWORD',
@@ -142,6 +143,7 @@ return [
 return [
   // ...
   'SSHTApiConfig' => [
+    'debug' => true, // debug mode = true/false
     'baseurl' => 'SSHTAPIGW_BASE_URL',
     'email' => 'SSHTAPIGW_EMAIL',
     'password' => 'SSHTAPIGW_PASSWORD',
