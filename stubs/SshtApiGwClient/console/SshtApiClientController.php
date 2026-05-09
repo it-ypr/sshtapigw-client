@@ -11,6 +11,7 @@ use yii\console\Controller;
 use yii\db\Query;
 use yii\helpers\Json;
 use Exception;
+use GuzzleHttp\Client;
 use Yii;
 
 class SshtApiClientController extends Controller
@@ -385,64 +386,49 @@ class SshtApiClientController extends Controller
           continue;
         }
 
-        // $this->stdout("\n" . str_repeat("=", 50) . "\n");
-        // $this->stdout("DEBUG PAYLOAD UNTUK RM: $rm\n");
-        // $this->stdout(Json::encode($payload, JSON_PRETTY_PRINT) . "\n");
-        // $this->stdout(str_repeat("=", 50) . "\n");
-        //
-        // $pilihan = $this->prompt("Kirim ke API? [Enter=Ya, s=Skip, q=Quit]", ['default' => 'y']);
-        //
-        // if ($pilihan === 's') {
-        //   $this->stdout("[-] RM $rm diskip.\n");
-        //   continue;
-        // } elseif ($pilihan === 'q') {
-        //   $this->stdout("[!] Berhenti manual.\n");
-        //   break;
-        // }
-
         // // 3. Kirim via Wrapper
-        // $response = SshtApiBase::request(
-        //   SshtApiUrl::SERVICE_REQUEST_CREATE_RAD,
-        //   ['json' => $payload]
-        // );
-        //
-        // $result = json_decode((string)$response->getBody(), true);
-        //
-        // if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
-        //   $data_api = $result['data'] ?? [];
-        //   $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
-        //
-        //   if ($sr_id_ihs) {
-        //     // 4. Save to Local DB
-        //     $now = date('Y-m-d H:i:s');
-        //     $dbLocal->createCommand()->insert('ssht_servicerequest', [
-        //       'servicerequest_idIHS' => $sr_id_ihs,
-        //       'encounter_idIHS' => $enc['idIHS'],
-        //       'acsn' => $data_api['acsn'] ?? null,
-        //       'category_code' => $data_api['category_code'] ?? null,
-        //       'category_display' => $data_api['category_display'] ?? null,
-        //       'code' => $data_api['code'] ?? null,
-        //       'display' => $data_api['display'] ?? null,
-        //       'perihal' => $data_api['perihal'] ?? null,
-        //       'rm' => $rm,
-        //       'pasien_idIHS' => $data_api['patient_idIHS'] ?? null,
-        //       'petugas_idIHS' => $payload['petugas_idIHS'],
-        //       'petugas_nama' => $payload['petugas_nama'],
-        //       'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
-        //       'dok' => $data_api['dok'] ?? null,
-        //       'date' => $data_api['date'],
-        //       'status' => 'active',
-        //       'created_at' => $now,
-        //       'updated_at' => $now,
-        //       'srid' => $data_api['srid'] ?? null,
-        //     ])->execute();
-        //
-        //     $this->stdout("[OK] RM: $rm | SR_ID: $sr_id_ihs\n");
-        //   }
-        // } else {
-        //   $errMsg = $result['error'] ?? "Unknown Error";
-        //   $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
-        // }
+        $response = SshtApiBase::request(
+          SshtApiUrl::SERVICE_REQUEST_CREATE_RAD,
+          ['json' => $payload]
+        );
+
+        $result = json_decode((string)$response->getBody(), true);
+
+        if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
+          $data_api = $result['data'] ?? [];
+          $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
+
+          if ($sr_id_ihs) {
+            // 4. Save to Local DB
+            $now = date('Y-m-d H:i:s');
+            $dbLocal->createCommand()->insert('ssht_servicerequest', [
+              'servicerequest_idIHS' => $sr_id_ihs,
+              'encounter_idIHS' => $enc['idIHS'],
+              'acsn' => $data_api['acsn'] ?? null,
+              'category_code' => $data_api['category_code'] ?? null,
+              'category_display' => $data_api['category_display'] ?? null,
+              'code' => $data_api['code'] ?? null,
+              'display' => $data_api['display'] ?? null,
+              'perihal' => $data_api['perihal'] ?? null,
+              'rm' => $rm,
+              'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+              'petugas_idIHS' => $payload['petugas_idIHS'],
+              'petugas_nama' => $payload['petugas_nama'],
+              'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+              'dok' => $data_api['dok'] ?? null,
+              'date' => $data_api['date'],
+              'status' => 'active',
+              'created_at' => $now,
+              'updated_at' => $now,
+              'srid' => $data_api['srid'] ?? null,
+            ])->execute();
+
+            $this->stdout("[OK] RM: $rm | SR_ID: $sr_id_ihs\n");
+          }
+        } else {
+          $errMsg = $result['error'] ?? "Unknown Error";
+          $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
+        }
       }
     } catch (\Exception $e) {
       $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
@@ -454,11 +440,15 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudy($tgl_param)
   {
-    $dbLocal = Yii::$app->db;
+    $dbLocal = Yii::$app->sshtAPIdb;
     $config = SshtApiBase::getConfig();
     $orthancUrl = $config["orthanc_url"]; // Sesuaikan URL Orthanc
-    $orthancAuth = [$config["orthanc_auth_user"], $config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
+    // $orthancAuth = [$config["orthanc_auth_user"], $config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
+    $orthancAuth = $config["orthanc_auth_user"] . ":" . $config["orthanc_auth_password"];
     $dicomRouterName = $config["dicom_router_name"]; // Sesuaikan nama modality di Orthanc
+
+    // print_r($orthancUrl);
+    // print_r($orthancAuth);
 
     try {
       // 1. Ambil data Service Request dari DB Lokal
@@ -473,10 +463,12 @@ class SshtApiClientController extends Controller
         return;
       }
 
-      $client = new \yii\httpclient\Client([
-        'baseUrl' => $orthancUrl,
-        'requestConfig' => ['auth' => $orthancAuth],
+      $client = new Client([
+        'base_uri' => $config["orthanc_url"],
+        'auth' => [$config["orthanc_auth_user"], $config["orthanc_auth_password"]],
+        'timeout'  => 30.0,
       ]);
+
 
       foreach ($records as $row) {
         $acsn_db = $row['acsn'];
@@ -498,39 +490,48 @@ class SshtApiClientController extends Controller
 
         // 2. Cari Study ID di Orthanc berdasarkan AccessionNumber lama (noradio)
         $findRes = $client->post('/tools/find', [
-          "Level" => "Study",
-          "Query" => ["AccessionNumber" => $noradio]
-        ], ['Content-Type' => 'application/json'])->send();
+          'json' => [
+            'Level' => 'Study',
+            'Query' => ['AccessionNumber' => (string)$noradio]
+          ]
+        ]);
+        $studies = json_decode($findRes->getBody(), true);
 
-        if (!$findRes->isOk || empty($findRes->data)) {
+        if (empty($studies)) {
           $this->stdout("  [-] Skip: Study tidak ditemukan di Orthanc untuk ACSN {$noradio}\n");
           continue;
         }
 
-        $studies = $findRes->data;
+        print_r($studies);
 
         foreach ($studies as $study_id) {
           // 3. Modify: Buat versi baru dengan metadata lengkap (PatientID IHS & ACSN Baru)
           $modifyRes = $client->post("/studies/{$study_id}/modify", [
-            "Replace" => [
-              "AccessionNumber" => $new_acsn,
-              "PatientID" => (string)$patient_id_ihs,
-            ],
-            "Force" => true
-          ], ['Content-Type' => 'application/json'])->send();
+            'json' => [
+              'Replace' => [
+                'AccessionNumber' => $new_acsn,
+                'PatientID' => (string)$patient_id_ihs,
+              ],
+              'Force' => true
+            ]
+          ]);
 
-          if ($modifyRes->isOk) {
-            $new_study_id = $modifyRes->data['ID'];
+          $dataModify = json_decode($modifyRes->getBody(), true);
+
+          if (!empty($dataModify)) {
+            $new_study_id = $dataModify['ID'];
             $this->stdout("  [OK] Metadata modified. New Orthanc ID: {$new_study_id}\n");
 
             // 4. HAPUS STUDY LAMA
-            $client->delete("/studies/{$study_id}")->send();
+            $client->delete("/studies/{$study_id}");
             $this->stdout("  [OK] Study lama ({$study_id}) telah dihapus dari Orthanc.\n");
 
             // 5. Kirim ID BARU ke DICOM Router
-            $storeRes = $client->post("/modalities/{$dicomRouterName}/store", $new_study_id)->send();
+            $storeRes = $client->post("/modalities/{$dicomRouterName}/store", [
+              'body' => $new_study_id
+            ]);
 
-            if ($storeRes->isOk) {
+            if ($storeRes->getStatusCode() == 200) {
               $this->stdout("  [OK] Berhasil kirim ke {$dicomRouterName} dengan ACSN {$new_acsn}\n");
             } else {
               $this->stdout("  [!] Gagal kirim ke Router: " . $storeRes->content . "\n");
@@ -551,7 +552,7 @@ class SshtApiClientController extends Controller
   public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
   {
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db1;
+    $dbSimrs = Yii::$app->db;
 
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
