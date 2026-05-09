@@ -2,7 +2,9 @@
 
 namespace common\services\SshtApiGwClient\console;
 
+use common\services\SshtApiGwClient\mapping\SshtApiQueryMapping;
 use common\services\SshtApiGwClient\SshtApiBase;
+use common\services\SshtApiGwClient\SshtApiDebugger;
 use common\services\SshtApiGwClient\SshtApiUrl;
 use common\services\SshtApiGwClient\util\SshtApiUtil;
 use yii\console\Controller;
@@ -13,30 +15,6 @@ use Yii;
 
 class SshtApiClientController extends Controller
 {
-  // private $config;
-
-  // public function __construct()
-  // {
-  //   $this->config = Yii::$app->params['SSHTApiConfig'] ?? [];
-  // }
-
-  // public function init()
-  // {
-  //   parent::init();
-  //   $this->config = \Yii::$app->params['SSHTApiConfig'] ?? [];
-  // }
-
-  /**
-   * php yii ssht-api-client/test-hello 
-   */
-  public function actionTestHello()
-  {
-    $config = SshtApiBase::getConfig();
-    echo "Hi.. \n";
-    echo "config load: \n" . json_encode($config) . "\n";
-    // return ExitCode::OK;
-  }
-
   private function parseIcdCodes($rawCodes)
   {
     if (empty($rawCodes)) return [];
@@ -83,48 +61,25 @@ class SshtApiClientController extends Controller
     ];
   }
 
-  /**
-   * php yii ssht-api-client/send-encounter-ralan 2026-05-01
-   */
+  public function actionTestHello()
+  {
+    $config = SshtApiBase::getConfig();
+    echo "Hi.. \n";
+    echo "config load: " . json_encode($config) . "\n";
+    // return ExitCode::OK;
+  }
+
   public function actionSendEncounterRalan($tgl_param)
   {
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
 
-    $subQuery = (new Query())
-      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
-      ->from('mr_periksa_poli')
-      ->where("tanggal LIKE '$tgl_param%'")
-      // ->where(['like', 'tanggal', $tgl_param . '%', false])
-      ->groupBy('Id');
-
-    $dataEncounter = (new Query())
-      ->select([
-        'tblnew.rm',
-        'TRIM(mr_ktp.ktp) as ktp',
-        'TRIM(mmr.nama) as pasien_nama',
-        'tblnew.dokter',
-        'TRIM(muser.nm_user) as dokter_nama',
-        'muser.idssht as dokter_ihs',
-        'mpoli.idihs as lokasi_ihs',
-        'tblnew.poli as poli',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) SEPARATOR ';') as icd_codes",
-        'MIN(tblnew.tglperiksa) as a_end',
-        'MAX(tblnew.resep) as p_rawend'
-      ])
-      ->from(['tblnew' => $subQuery])
-      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
-      ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
-      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
-      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
-      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where("tblnew.tglperiksa LIKE '$tgl_param%'")
-      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
-      ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
-      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
-      ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74', '29']]) // Filter poli
-      ->andWhere(['not', ['muser.idssht' => null]])
-      ->groupBy('tblnew.rm')
-      ->all(\Yii::$app->db); // Asumsi db2 adalah koneksi SIMRS
+    $dataEncounter = SshtApiQueryMapping::queryEncounterRalanSimrs($tgl_param);
 
     if (empty($dataEncounter)) {
       echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
@@ -238,6 +193,14 @@ class SshtApiClientController extends Controller
           "class" => "ralan"
         ];
 
+        // --- DEBUG & CONFIRMATION ---
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
+          payload: $payloadEncounter,
+        )) {
+          continue;
+        }
+
         $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_CREATE, ['json' => $payloadEncounter]);
         $resEnc = json_decode((string) $resEncReq->getBody(), true);
         $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
@@ -283,6 +246,14 @@ class SshtApiClientController extends Controller
               "inprogress_end" => $times['inprogress_end']
             ];
 
+            // --- DEBUG & CONFIRMATION ---
+            if (!$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
+              payload: $payloadCondition,
+            )) {
+              continue;
+            }
+
             $resCondReq = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
             sleep(2);
             $resCond = json_decode((string)$resCondReq->getBody(), true);
@@ -327,10 +298,9 @@ class SshtApiClientController extends Controller
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
     echo "\n--- TASK BOT DONE ---\n";
   }
-
   public function actionSendEncounterFinish($tgl_param) {}
 
-  // public function actionSendCondition($tgl_param) {}
+  public function actionSendCondition($tgl_param) {}
 
   public function actionSendObservationVitalTd($tgl_param) {}
 
@@ -360,14 +330,20 @@ class SshtApiClientController extends Controller
   public function actionSendServiceRequestRadio($tgl_param)
   {
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db; // dbSimrs
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
 
     try {
       // 1. Ambil data encounter dari DB Lokal
       $encounters = (new Query())
-        ->select(['idIHS', 'subject_rm', 'inprogress_start'])
+        ->select(['idIHS', 'subject_rm', 'inprogress_start', 'class'])
         ->from('ssht_encounter')
         ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        // ->andWhere(['class' => $class])
         ->all($dbLocal);
 
       if (empty($encounters)) {
@@ -379,27 +355,8 @@ class SshtApiClientController extends Controller
         $rm = $enc['subject_rm'];
 
         // 2. Cari detail order di SIMRS
-        $simrs = (new Query())
-          ->select([
-            'rd_order_poli.*',
-            'rd_biodata.noregis',
-            'rd_biodata.dnkirim',
-            'rd_biodata.dkirim',
-            'trim(rd_biodata.dperiksa) as dperiksa',
-            'muser.nm_user',
-            'rd_daftar_periksa.loinc'
-          ])
-          ->from('rd_order_poli')
-          ->leftJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
-          ->leftJoin('muser', 'rd_biodata.dperiksa = muser.nik')
-          ->leftJoin('rd_daftar_periksa', 'rd_order_poli.kode = rd_daftar_periksa.kode')
-          ->where([
-            'rd_order_poli.rm' => $rm,
-            'rd_order_poli.tanggal' => $tgl_param,
-            'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
-            'rd_biodata.noregis' => ''
-          ])
-          ->one($dbSimrs);
+        // $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio($enc['class'], $rm, $tgl_param);
+        $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio($enc['class'], $rm, $tgl_param);
 
         if (!$simrs) {
           $this->stdout("[-] SKIP: RM $rm tydac ada order radiologi\n");
@@ -421,64 +378,71 @@ class SshtApiClientController extends Controller
         ];
 
         // --- DEBUG & CONFIRMATION ---
-        $this->stdout("\n" . str_repeat("=", 50) . "\n");
-        $this->stdout("DEBUG PAYLOAD UNTUK RM: $rm\n");
-        $this->stdout(Json::encode($payload, JSON_PRETTY_PRINT) . "\n");
-        $this->stdout(str_repeat("=", 50) . "\n");
-
-        $pilihan = $this->prompt("Kirim ke API? [Enter=Ya, s=Skip, q=Quit]", ['default' => 'y']);
-
-        if ($pilihan === 's') {
-          $this->stdout("[-] RM $rm diskip.\n");
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_RAD),
+          payload: $payload,
+        )) {
           continue;
-        } elseif ($pilihan === 'q') {
-          $this->stdout("[!] Berhenti manual.\n");
-          break;
         }
 
-        // 3. Kirim via Wrapper
-        $response = SshtApiBase::request(
-          SshtApiUrl::SERVICE_REQUEST_CREATE_RAD,
-          ['json' => $payload]
-        );
+        // $this->stdout("\n" . str_repeat("=", 50) . "\n");
+        // $this->stdout("DEBUG PAYLOAD UNTUK RM: $rm\n");
+        // $this->stdout(Json::encode($payload, JSON_PRETTY_PRINT) . "\n");
+        // $this->stdout(str_repeat("=", 50) . "\n");
+        //
+        // $pilihan = $this->prompt("Kirim ke API? [Enter=Ya, s=Skip, q=Quit]", ['default' => 'y']);
+        //
+        // if ($pilihan === 's') {
+        //   $this->stdout("[-] RM $rm diskip.\n");
+        //   continue;
+        // } elseif ($pilihan === 'q') {
+        //   $this->stdout("[!] Berhenti manual.\n");
+        //   break;
+        // }
 
-        $result = json_decode((string) $response->getBody(), true);
-
-        if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
-          $data_api = $result['data'] ?? [];
-          $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
-
-          if ($sr_id_ihs) {
-            // 4. Save to Local DB
-            $now = date('Y-m-d H:i:s');
-            $dbLocal->createCommand()->insert('ssht_servicerequest', [
-              'servicerequest_idIHS' => $sr_id_ihs,
-              'encounter_idIHS' => $enc['idIHS'],
-              'acsn' => $data_api['acsn'] ?? null,
-              'category_code' => $data_api['category_code'] ?? null,
-              'category_display' => $data_api['category_display'] ?? null,
-              'code' => $data_api['code'] ?? null,
-              'display' => $data_api['display'] ?? null,
-              'perihal' => $data_api['perihal'] ?? null,
-              'rm' => $rm,
-              'pasien_idIHS' => $data_api['patient_idIHS'] ?? null,
-              'petugas_idIHS' => $payload['petugas_idIHS'],
-              'petugas_nama' => $payload['petugas_nama'],
-              'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
-              'dok' => $data_api['dok'] ?? null,
-              'date' => $enc['inprogress_start'],
-              'status' => 'active',
-              'created_at' => $now,
-              'updated_at' => $now,
-              'srid' => $data_api['srid'] ?? null,
-            ])->execute();
-
-            $this->stdout("[OK] RM: $rm | SR_ID: $sr_id_ihs\n");
-          }
-        } else {
-          $errMsg = $result['error'] ?? "Unknown Error";
-          $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
-        }
+        // // 3. Kirim via Wrapper
+        // $response = SshtApiBase::request(
+        //   SshtApiUrl::SERVICE_REQUEST_CREATE_RAD,
+        //   ['json' => $payload]
+        // );
+        //
+        // $result = json_decode((string)$response->getBody(), true);
+        //
+        // if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
+        //   $data_api = $result['data'] ?? [];
+        //   $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
+        //
+        //   if ($sr_id_ihs) {
+        //     // 4. Save to Local DB
+        //     $now = date('Y-m-d H:i:s');
+        //     $dbLocal->createCommand()->insert('ssht_servicerequest', [
+        //       'servicerequest_idIHS' => $sr_id_ihs,
+        //       'encounter_idIHS' => $enc['idIHS'],
+        //       'acsn' => $data_api['acsn'] ?? null,
+        //       'category_code' => $data_api['category_code'] ?? null,
+        //       'category_display' => $data_api['category_display'] ?? null,
+        //       'code' => $data_api['code'] ?? null,
+        //       'display' => $data_api['display'] ?? null,
+        //       'perihal' => $data_api['perihal'] ?? null,
+        //       'rm' => $rm,
+        //       'pasien_idIHS' => $data_api['patient_idIHS'] ?? null,
+        //       'petugas_idIHS' => $payload['petugas_idIHS'],
+        //       'petugas_nama' => $payload['petugas_nama'],
+        //       'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+        //       'dok' => $data_api['dok'] ?? null,
+        //       'date' => $data_api['date'],
+        //       'status' => 'active',
+        //       'created_at' => $now,
+        //       'updated_at' => $now,
+        //       'srid' => $data_api['srid'] ?? null,
+        //     ])->execute();
+        //
+        //     $this->stdout("[OK] RM: $rm | SR_ID: $sr_id_ihs\n");
+        //   }
+        // } else {
+        //   $errMsg = $result['error'] ?? "Unknown Error";
+        //   $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
+        // }
       }
     } catch (\Exception $e) {
       $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
@@ -490,7 +454,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudy($tgl_param)
   {
-    $dbLocal = Yii::$app->sshtAPIdb;
+    $dbLocal = Yii::$app->db;
     $config = SshtApiBase::getConfig();
     $orthancUrl = $config["orthanc_url"]; // Sesuaikan URL Orthanc
     $orthancAuth = [$config["orthanc_auth_user"], $config["orthanc_auth_password"]]; // Sesuaikan user:pass Orthanc
@@ -587,7 +551,7 @@ class SshtApiClientController extends Controller
   public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
   {
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db;
+    $dbSimrs = Yii::$app->db1;
 
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
@@ -597,8 +561,8 @@ class SshtApiClientController extends Controller
         'query' => ['date' => $tgl_param]
       ]);
 
-      $respImagingReq = json_decode((string) $respImaging->getBody());
-      $items = isset($respImagingReq['data']) ? $respImagingReq['data'] : [];
+      $respImagingReq = json_decode((string) $respImaging->getBody(), true);
+      $items = $respImagingReq['data'] ?? [];
       $this->stdout("[*] Menemukan " . count($items) . " data untuk diproses.\n");
 
       foreach ($items as $master) {
@@ -610,8 +574,8 @@ class SshtApiClientController extends Controller
           $respDetail = SshtApiBase::request(SshtApiUrl::IMAGINGSTUDY_GET, [
             'query' => ['id' => $imgIdIhs]
           ]);
-          $respDetailReq = json_decode((string) $respDetail->getBody(), true);
-          $detailData = isset($respDetailReq['data']) ? $respDetailReq['data'] : null;
+          $detailDataReq = json_decode((string) $respDetail->getBody(), true);
+          $detailData = $detailDataReq['data'] ?? null;
           if (!$detailData) continue;
 
           $srIdIhs = $detailData['servicerequest_idIHS'];
@@ -619,12 +583,7 @@ class SshtApiClientController extends Controller
           $noradio = strpos($acsnFull, '-') !== false ? explode('-', $acsnFull)[0] : $acsnFull;
 
           // 3. Query Hasil Expertise di SIMRS
-          $row = (new Query())
-            ->select(['b.rm', 'h.hasil'])
-            ->from('rd_hasil h')
-            ->leftJoin('rd_biodata b', 'h.noradio = b.noradio')
-            ->where(['h.noradio' => $noradio, 'h.ondelete' => 0])
-            ->one($dbSimrs);
+          $row = SshtApiQueryMapping::queryObservationDanDiagnosticReportSimrsRadio($noradio);
 
           if (!$row || empty($row['hasil'])) {
             $this->stdout("[-] Data SIMRS tidak ditemukan/hasil kosong: $noradio\n");
@@ -659,15 +618,15 @@ class SshtApiClientController extends Controller
               ]);
 
               if ($resO->getStatusCode() == 200 || $resO->getStatusCode() == 201) {
-                $resDataOReq = json_decode((string) $resO->getBody(), true);
-                $resDataO = isset($resDataOReq['data']) ? $resDataOReq['data'] : [];
+                $resOReq = json_decode((string) $resO->getBody(), true);
+                $resDataO = $resOReq['data'] ?? [];
                 $dbLocal->createCommand()->insert('ssht_observation', [
                   'observation_idIHS' => $resDataO['observation_idIHS'],
                   'encounter_idIHS' => $resDataO['encounter_idIHS'],
                   'subject_idIHS' => $resDataO['subject_idIHS'] ?? $resDataO['subject_idIdIHS'],
                   'obs_code' => $resDataO['obs_code'],
                   'obs_display' => $resDataO['obs_display'],
-                  'obs_valueString' => $obsText,
+                  'obs_valueString' => $resDataO['obs_valueString'],
                   'date' => $resDataO['date'],
                   'rm' => $row['rm'],
                   'status' => $resDataO['status'],
@@ -702,8 +661,7 @@ class SshtApiClientController extends Controller
               ]);
 
               if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
-                $resDataRReq = json_decode((string) $resR->getBody(), true);
-                $resDataR = isset($resDataRReq['data']) ? $resDataRReq['data'] : [];
+                $resDataR = $resR->getBody()['data'] ?? [];
                 $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
                   'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
                   'encounter_idIHS' => $resDataR['encounter_idIHS'],

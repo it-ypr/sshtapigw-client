@@ -7,6 +7,13 @@ use Yii;
 
 class SshtApiUtil
 {
+  public static function genDebugContext(array $context)
+  {
+    return [
+      'method' => $context[0],
+      'url' => $context[1],
+    ];
+  }
 
   public static function parseExpertiseRdHasilRtf($rtfContent)
   {

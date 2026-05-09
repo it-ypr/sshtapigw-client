@@ -464,8 +464,8 @@ class SshtApiUrl
    *    "keyword": "string (required) - keyword ['acarbose']"
    * }
    */
-  public const KFA_ALL = "ssht/misc/kfa/product/all";
-  public const KFA_PRICE = "ssht/misc/kfa/product/price";
+  public const KFA_ALL = ["POST", "ssht/misc/kfa/product/all"];
+  public const KFA_PRICE = ["POST", "ssht/misc/kfa/product/price"];
 
   /**
    * Get kfa data detail product.
