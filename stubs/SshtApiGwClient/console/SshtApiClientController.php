@@ -551,8 +551,13 @@ class SshtApiClientController extends Controller
    */
   public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
   {
+    $config = SshtApiBase::getConfig();
+
     $dbLocal = Yii::$app->sshtAPIdb;
-    $dbSimrs = Yii::$app->db;
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
 
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
@@ -571,6 +576,14 @@ class SshtApiClientController extends Controller
         if (!$imgIdIhs) continue;
 
         try {
+
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::IMAGINGSTUDY_GET),
+            payload: ["imagingstudy_idIHS" => $imgIdIhs],
+          )) {
+            continue;
+          }
+
           // 2. Get Detail Imaging untuk dapat ACSN & ServiceRequest ID
           $respDetail = SshtApiBase::request(SshtApiUrl::IMAGINGSTUDY_GET, [
             'query' => ['id' => $imgIdIhs]
@@ -609,6 +622,18 @@ class SshtApiClientController extends Controller
               // "rm" => "required|alpha_dash",
               // "valueString" => "sometimes|string",
 
+              if (!$debugger->allow(
+                context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_RAD),
+                payload: [
+                  "servicerequest_idIHS" => $srIdIhs,
+                  "imagingstudy_idIHS" => $imgIdIhs,
+                  "rm" => $row['rm'],
+                  "valueString" => $obsText
+                ],
+              )) {
+                continue;
+              }
+
               $resO = SshtApiBase::request(SshtApiUrl::OBSERVATION_CREATE_RAD, [
                 'json' => [
                   "servicerequest_idIHS" => $srIdIhs,
@@ -620,6 +645,7 @@ class SshtApiClientController extends Controller
 
               if ($resO->getStatusCode() == 200 || $resO->getStatusCode() == 201) {
                 $resOReq = json_decode((string) $resO->getBody(), true);
+                print_r($resOReq);
                 $resDataO = $resOReq['data'] ?? [];
                 $dbLocal->createCommand()->insert('ssht_observation', [
                   'observation_idIHS' => $resDataO['observation_idIHS'],
@@ -653,6 +679,18 @@ class SshtApiClientController extends Controller
               ->exists($dbLocal);
 
             if (!$checkDr) {
+
+              if (!$debugger->allow(
+                context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD),
+                payload: [
+                  "servicerequest_idIHS" => $srIdIhs,
+                  "value" => $impressionText,
+                  "noradio" => $noradio
+                ],
+              )) {
+                continue;
+              }
+
               $resR = SshtApiBase::request(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD, [
                 'json' => [
                   "servicerequest_idIHS" => $srIdIhs,
@@ -662,7 +700,9 @@ class SshtApiClientController extends Controller
               ]);
 
               if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
-                $resDataR = $resR->getBody()['data'] ?? [];
+                $resRReq = json_decode((string) $resR->getBody(), true);
+                print_r($resRReq);
+                $resDataR = $resRReq['data'] ?? [];
                 $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
                   'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
                   'encounter_idIHS' => $resDataR['encounter_idIHS'],
