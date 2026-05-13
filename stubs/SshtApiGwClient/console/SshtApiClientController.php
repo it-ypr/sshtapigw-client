@@ -293,7 +293,171 @@ class SshtApiClientController extends Controller
     // return ExitCode::OK;
   }
 
-  public function actionSendEncounterUgd($tgl_param) {}
+  public function actionSendEncounterUgd($tgl_param)
+  {
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
+
+    $dataEncounter = SshtApiQueryMapping::queryEncounterUgdSimrs($tgl_param);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($dataEncounter) . " data.\n";
+
+    // 2026-05-12 08:16 - testing encounter ugd
+    print_r($dataEncounter);
+    // exit;
+
+    foreach ($dataEncounter as $row) {
+      try {
+        echo "\nProcessing RM: {$row['rm']}...";
+
+        // 2. Get IHS Pasien via KTP (Wrapper)
+        $ktp = preg_replace('/\D/', '', $row['ktp']);
+
+        $resPatient = SshtApiBase::request(SshtApiUrl::PATIENTS_GET_BY_NIK, ['query' => ['id' => $ktp]]);
+        $resPatientReq = json_decode((string) $resPatient->getBody(), true);
+
+        sleep(1);
+
+        $pasienIhs = $resPatientReq['data']['idIHS'] ?? null;
+        // $pasienIhs = $resPatient['data']['idIHS'] ?? null;
+
+        if (!$pasienIhs) {
+          echo " SKIPPED (IHS Pasien tidak ditemukan)";
+          continue;
+        }
+
+        // 3. Get Nama Lokasi (Wrapper)
+        $resLocation = SshtApiBase::request(SshtApiUrl::LOCATION_GET_BY_IHS, ['query' => ['id' => $row['lokasi_ihs']]]);
+
+        $locationNamaReq = json_decode((string) $resLocation->getBody(), true);
+        $locationNama = $locationNamaReq['data']['nama'] ?? 'Poliklinik';
+
+        // 4. Generate Waktu (Format SQL: YYYY-MM-DD HH:mm:ss)
+        $times = $this->generateEncounterTimes($row['a_end']);
+
+        // 5. SEND ENCOUNTER (Sesuai Body JSON Gateway kamu)
+        $payloadEncounter = [
+          "pasien_idIHS" => $pasienIhs,
+          "pasien_nama" => $row['pasien_nama'],
+          "pasien_rm" => $row['rm'],
+          "practitioner_idIHS" => $row['dokter_ihs'],
+          "practitioner_nama" => $row['dokter_nama'],
+          "location_idIHS" => $row['lokasi_ihs'],
+          "location_nama" => $locationNama,
+          "location_poli" => $row['poli'],
+          "arrived_at" => $times['arrived_at'],
+          "inprogress_at" => $times['inprogress_at'],
+          "class" => "ugd"
+        ];
+
+        // --- DEBUG & CONFIRMATION ---
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
+          payload: $payloadEncounter,
+        )) {
+          continue;
+        }
+
+        $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_CREATE, ['json' => $payloadEncounter]);
+        $resEnc = json_decode((string) $resEncReq->getBody(), true);
+        $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+
+        sleep(1);
+
+        if ($encounterIhsId) {
+          echo " SUCCESS ENCOUNTER: $encounterIhsId\n";
+          // Ambil data hasil wrap gateway
+          $encData = $resEnc['data'];
+
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
+            'idIHS'              => $encData['idIHS'],
+            'subject_rm'         => $encData['subject_rm'],
+            'subject_idIHS'      => $encData['subject_idIHS'],
+            'subject_nama'       => $encData['subject_nama'],
+            'practition_idIHS'   => $encData['practition_idIHS'],
+            'practition_lokalid' => $row['dokter'], // Ambil dari data lokal SIMRS kamu
+            'practition_nama'    => $encData['practition_nama'],
+            'location_idIHS'     => $encData['location_idIHS'],
+            'location_nama'      => $encData['location_nama'],
+            'organization_idIHS'  => $encData['organization_idIHS'],
+            'arrived_start'      => $encData['arrived_at'],
+            'arrived_end'        => $encData['arrived_end'],
+            'inprogress_start'   => $encData['inprogress_start'],
+            'inprogress_end'     => $times['inprogress_end'], // dari generator lokal
+            'created_at'         => date('Y-m-d H:i:s'),
+            'updated_at'         => date('Y-m-d H:i:s'),
+            'class'              => $encData['class'],
+          ])->execute();
+
+          // 6. SEND CONDITION (Looping ICD10)
+          $icdList = $this->parseIcdCodes($row['icd_codes']);
+
+          foreach ($icdList as $key => $icd) {
+            $payloadCondition = [
+              "encounter_idIHS" => $encounterIhsId,
+              "patient_idIHS" => $pasienIhs,
+              "patient_nama" => $row['pasien_nama'],
+              "conditionCode" => $icd['code'],
+              "conditionName" => $icd['display'],
+              "inprogress_start" => $encData['inprogress_start'],
+              "inprogress_end" => $times['inprogress_end']
+            ];
+
+            // --- DEBUG & CONFIRMATION ---
+            if (!$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
+              payload: $payloadCondition,
+            )) {
+              continue;
+            }
+
+            $resCondReq = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
+            sleep(2);
+            $resCond = json_decode((string)$resCondReq->getBody(), true);
+            $conditionIhsId = $resCond['data']['idIHS'] ?? null;
+
+            if ($conditionIhsId) {
+              $condData = $resCond['data'];
+
+              \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
+                'condition_idIHS' => $conditionIhsId,
+                'encounter_idIHS' => $encounterIhsId,
+                'conditionRank'   => ($key == 0) ? 1 : 2,
+                'code'            => $icd['code'],
+                'display'         => $icd['display'],
+                'rm'              => $row['rm'],
+                'dok'             => $row['dokter'],
+                'created_at'      => date('Y-m-d H:i:s'),
+                'updated_at'      => date('Y-m-d H:i:s'),
+              ])->execute();
+            }
+            echo "   > Condition OK: " . ($condData['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
+          }
+        } else {
+          echo " FAILED ENCOUNTER";
+          sleep(2);
+        }
+      } catch (\Exception $e) {
+        echo " ERROR: " . $e->getMessage() . "\n";
+        sleep(5);
+      }
+      // jeda rate limit gateway
+      sleep(2);
+    }
+
+    echo "\n--- TASK BOT DONE: " . $tgl_param . " ---\n";
+  }
+
   public function actionSendEncounterRanap($tgl_param)
   {
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
