@@ -22,8 +22,8 @@ class SshtApiClientController extends Controller
 
     $mapping = [
       "R50.0" => "R50",
-      "A01.0" => "A01",
-      "Z00.0" => "Z00",
+      // "A01.0" => "A01",
+      // "Z00.0" => "Z00",
     ];
 
     $codes = explode(';', $rawCodes);
@@ -70,6 +70,10 @@ class SshtApiClientController extends Controller
     // return ExitCode::OK;
   }
 
+
+  /**
+   * Run Cron: php yii ssht-api-client/send-encounter-ralan 2026-05-01
+   */
   public function actionSendEncounterRalan($tgl_param)
   {
     $config = SshtApiBase::getConfig();
@@ -78,7 +82,7 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
-    echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
+    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
 
     $dataEncounter = SshtApiQueryMapping::queryEncounterRalanSimrs($tgl_param);
 
@@ -289,10 +293,13 @@ class SshtApiClientController extends Controller
       sleep(2);
     }
 
-    echo "\n--- TASK BOT DONE ---\n";
+    echo "\n--- TASK BOT DONE: " . $tgl_param . " ---\n";
     // return ExitCode::OK;
   }
 
+  /**
+   * Run Cron: php yii ssht-api-client/send-encounter-ugd 2026-05-01
+   */
   public function actionSendEncounterUgd($tgl_param)
   {
     $config = SshtApiBase::getConfig();
@@ -458,12 +465,204 @@ class SshtApiClientController extends Controller
     echo "\n--- TASK BOT DONE: " . $tgl_param . " ---\n";
   }
 
+
+  /**
+   * Run Cron: php yii ssht-api-client/send-encounter-ranap 2026-05-01
+   */
   public function actionSendEncounterRanap($tgl_param)
   {
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
     echo "\n--- TASK BOT DONE ---\n";
   }
-  public function actionSendEncounterFinish($tgl_param) {}
+
+  /**
+   * Run Cron: php yii ssht-api-client/send-encounter-finish-ralan 2025-12-01
+   */
+  public function actionSendEncounterFinishRalan($tgl_param)
+  {
+    // [inprogress] baru pindah logic dari python ke yii2 console..
+    // // $classEnc = 'AMB';
+    // $dbLocal = Yii::$app->sshtAPIdb;
+    // $config = SshtApiBase::getConfig();
+    // $debugger = new SshtApiDebugger(
+    //   enabled: $config['debug']
+    // );
+    // echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
+    // $encounter = (new Query())
+    //   ->select([
+    //     'idIHS',
+    //     'subject_rm',
+    //     'subject_idIHS',
+    //     'subject_nama',
+    //     'practition_lokalid',
+    //     'practition_idIHS',
+    //     'practition_nama',
+    //     'location_idIHS',
+    //     'location_nama',
+    //     'arrived_start',
+    //     'arrived_end',
+    //     'inprogress_start',
+    //     'inprogress_end',
+    //     'finish_start',
+    //     'finish_end',
+    //     'class'
+    //   ])->from('ssht_encounter')
+    //   ->where(['like', 'arrived_start', $tgl_param . '%', false])
+    //   ->all($dbLocal);
+    //
+    // foreach ($encounter as $record) {
+    //   // --- DEBUG & CONFIRMATION ---
+    //   if (!$debugger->allow(
+    //     context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+    //     payload: $record['idIHS'],
+    //   )) {
+    //     continue;
+    //   }
+    //   $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
+    //   $resEnc = json_decode((string) $resEncReq->getBody(), true);
+    //   $resEncData = isset($resEnc['data']) ? $resEnc['data'] : [];
+    //   $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+    //
+    //   echo "\nData Encounter Get: \n";
+    //   print_r($resEnc);
+    //
+    //   // if (!$debugger->allow(
+    //   //   context: ['method' => 'Updated Class Encounter di local?'],
+    //   //   payload: $encounterIhsId,
+    //   // )) {
+    //   //   continue;
+    //   // }
+    //   //
+    //   // sleep(1);
+    //
+    //   if ($resEncReq->getStatusCode() == 200 && $resEnc['status'] == 'true') {
+    //     // $payload = [
+    //     //   'idIHS' => $resEncData['idIHS'],
+    //     //   'arrived_start' => $resEncData['arrived_start'],
+    //     //   'arrived_end' => $resEncData['arrived_end'],
+    //     //   'inprogress_start' => $resEncData['inprogress_start'],
+    //     //   'inprogress_end' => $resEncData['inprogress_end'],
+    //     //   'finish_start' => $resEncData['finish_start'],
+    //     //   'finish_end' => $resEncData['finish_end'],
+    //     //   'class' => $resEncData['class']
+    //     // ];
+    //     //
+    //     // $dbLocal->createCommand()->update('ssht_encounter', $payload, ['idIHS' => $encounterIhsId])->execute();
+    //
+    //     // $getconditionsSimrs = SshtApiQueryMapping::queryConditionSimrs(
+    //     //   tgl_param: $tgl_param,
+    //     //   rm: $record['subject_rm'],
+    //     //   dok: $record['practition_lokalid'],
+    //     //   poli_idihs: $record['location_idIHS']
+    //     // );
+    //
+    //     $dbSimrs = Yii::$app->db;
+    //
+    //     $getconditionsSimrs = (new Query())
+    //       ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+    //       ->from('mr_kunjungan k')
+    //       ->leftJoin('mpoli', 'k.poli = mpoli.poli')
+    //       ->where([
+    //         'k.rm' => $record['subject_rm'],
+    //         'k.dokter' => $record['practition_lokalid'],
+    //         'k.tanggal' => $tgl_param,
+    //         'mpoli.idihs' => $record['location_idIHS'],
+    //       ])
+    //       ->orderBy("Id ASC")
+    //       ->all($dbSimrs);
+    //
+    //     $getConditionLocal = (new Query())
+    //       ->select([
+    //         'condition_idIHS',
+    //         'encounter_idIHS',
+    //         'code',
+    //         'display',
+    //         'conditionRank'
+    //       ])->from('ssht_condition')
+    //       ->where(['encounter_idIHS' => $encounterIhsId])
+    //       ->all($dbLocal);
+    //
+    //     // // --- DEBUG & CONFIRMATION ---
+    //     // if (!$debugger->allow(
+    //     //   context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET_BY_ENCOUNTER),
+    //     //   payload: $record['idIHS'],
+    //     // )) {
+    //     //   continue;
+    //     // }
+    //
+    //     // 1. Ambil urutan ICD dari SIMRS sebagai acuan utama
+    //     // Kita bersihkan karakter non-alphanumeric agar 'I24.9' dan 'I249' tetap cocok
+    //     $simrsOrder = [];
+    //     foreach ($getconditionsSimrs as $index => $row) {
+    //       $cleanIcd = preg_replace('/[^A-Za-z0-9]/', '', $row['icd']);
+    //       $simrsOrder[$cleanIcd] = $index + 1; // Rank dimulai dari 1
+    //     }
+    //
+    //     // 2. Map data lokal berdasarkan acuan di atas
+    //     $diagnosis = array_map(function ($localItem) use ($simrsOrder) {
+    //       $cleanLocalCode = preg_replace('/[^A-Za-z0-9]/', '', $localItem['code']);
+    //
+    //       // Cari rank berdasarkan urutan di SIMRS
+    //       $rank = isset($simrsOrder[$cleanLocalCode]) ? $simrsOrder[$cleanLocalCode] : 99;
+    //
+    //       return [
+    //         'condition_idIHS' => $localItem['condition_idIHS'],
+    //         'code'            => $localItem['code'],
+    //         'display'         => $localItem['display'],
+    //         'conditionRank'   => (string) $rank,
+    //       ];
+    //     }, $getConditionLocal);
+    //
+    //     // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
+    //     usort($diagnosis, function ($a, $b) {
+    //       return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
+    //     });
+    //
+    //     $payloadEncounterFinish = [
+    //       'encounter_idIHS' => $encounterIhsId,
+    //       'patient_idIHS' => $record['subject_idIHS'],
+    //       'patient_nama' => $record['subject_nama'],
+    //
+    //       'practition_idIHS' => $record['practition_idIHS'],
+    //       'practition_nama' => $record['practition_nama'],
+    //
+    //       'location_idIHS' => $record['location_idIHS'],
+    //       'location_nama' => $record['location_nama'],
+    //
+    //       'diagnosis' => $diagnosis,
+    //
+    //       'arrived_start' => $record['arrived_start'],
+    //       'arrived_end' => $record['arrived_end'],
+    //
+    //       'inprogress_start' => $record['inprogress_start'],
+    //       'inprogress_end' => $record['inprogress_end'],
+    //
+    //       'finish_start' => $record['finish_start'],
+    //       'finish_end' => $record['finish_end'],
+    //
+    //       'class' => $resEncData['class'],
+    //     ];
+    //
+    //     // --- DEBUG & CONFIRMATION ---
+    //     if (!$debugger->allow(
+    //       context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
+    //       payload: $payloadEncounterFinish,
+    //     )) {
+    //       continue;
+    //     }
+    //
+    //     // $encounterFinish = SshtApiBase::request(SshtApiUrl::ENCOUNTER_FINISH, ['json' => $payloadEncounterFinish]);
+    //
+    //     // if ($encounterFinish->getStatusCode() == 200 || $encounterFinish->getStatusCode() == 201) {
+    //     // }
+    //
+    //
+    //     // end if encounter get
+    //   }
+    //   // end foreach $encounter record
+    // }
+    // echo "\n--- TASK BOT DONE ---\n";
+  }
 
   public function actionSendCondition($tgl_param) {}
 
@@ -521,7 +720,11 @@ class SshtApiClientController extends Controller
 
         // 2. Cari detail order di SIMRS
         // $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio($enc['class'], $rm, $tgl_param);
-        $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio($enc['class'], $rm, $tgl_param);
+        // $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio($enc['class'], $rm, $tgl_param);
+
+        // $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio('EMER', $rm, $tgl_param);
+        // $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio('INP', $rm, $tgl_param);
+        $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio('AMB', $rm, $tgl_param);
 
         if (!$simrs) {
           $this->stdout("[-] SKIP: RM $rm tydac ada order radiologi\n");
@@ -893,6 +1096,165 @@ class SshtApiClientController extends Controller
       }
     } catch (\Exception $e) {
       $this->stdout("\n[CRITICAL] Error Global: " . $e->getMessage() . "\n");
+    }
+  }
+
+  /**
+   * php yii ssht-api-client/send-observation-ralan-test 2026-05-01 rm
+   */
+  public function actionSendObservationRalanTest($tanggal, $rm)
+  {
+    $simrsobs = SshtApiQueryMapping::queryObservationRalan($tanggal, $rm);
+    if ($simrsobs) {
+      print_r($simrsobs);
+    } else {
+      echo "\ntidak ditemukan data observasi KO.\n";
+    }
+  }
+
+  /**
+   * php yii ssht-api-client/send-observation-ralan 2026-05-01
+   */
+  // public function actionSendObservationRalan($tanggal, $rm)
+  public function actionSendObservationRalan($tgl_param)
+  {
+    $config = SshtApiBase::getConfig();
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $encounters = (new Query())
+        ->select([
+          'idIHS',
+          'subject_rm',
+          'subject_idIHS',
+          'subject_nama',
+          'practition_lokalid',
+          'practition_idIHS',
+          'inprogress_start',
+          'class'
+        ])->from('ssht_encounter')
+        ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        // ->andWhere(['class' => $class])
+        ->all($dbLocal);
+
+      // Yii::info(json_encode($encounters), 'log-send-observation-ralan-get-encounter-data');
+      print_r($encounters[0]);
+      print_r($encounters[1]);
+      print_r($encounters[2]);
+      print_r($encounters[3]);
+      print_r($encounters[4]);
+      echo "\n...\n";
+      echo "ditemukan " . count($encounters) . " data.\n";
+      // exit;
+
+      if (empty($encounters)) {
+        $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+        return;
+      }
+
+      foreach ($encounters as $enc) {
+        $rm = $enc['subject_rm'];
+
+        $simrsobs = SshtApiQueryMapping::queryObservationRalan($tgl_param, $rm);
+        // print_r($simrsobs);
+
+        if (!$simrsobs) {
+          $this->stdout("[-] SKIP: RM $rm tydac ada data observasi vital\n");
+          continue;
+        }
+
+        $mapping = [
+          'systolic' => 'tdsys',
+          'diastolic' => 'tddias',
+          'heart_rate' => 'nadi',
+          // 2026-05-22 19:22 - disable dulu anomali data di source simrs keyword penulisan tidak sesuai format..
+          // 'body_temp' => 'suhu',
+          'respiratory_rate' => 'nafas',
+        ];
+
+        $obsdata = $simrsobs['observation_data'];
+
+
+        foreach ($mapping as $key => $obsName) {
+
+          if (!isset($obsdata[$key])) {
+            continue;
+          }
+
+          $payload = [
+            "encounterIdIHS" => $enc['idIHS'],
+            "obs_name" => $obsName,
+            "obs_value" => $obsdata[$key],
+            "patient_idIHS" => $enc['subject_idIHS'],
+            "patient_nama" => $enc['subject_nama'],
+            "practition_idIHS" => $enc['practition_idIHS'],
+            "inprogress_start" => $enc['inprogress_start'],
+            "rm" => $rm,
+            "dok" => $enc['practition_lokalid']
+          ];
+
+          // debugger
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_VITAL),
+            payload: $payload,
+          )) {
+            continue;
+          }
+
+          $response = SshtApiBase::request(
+            SshtApiUrl::OBSERVATION_CREATE_VITAL,
+            ['json' => $payload]
+          );
+
+          $result = json_decode((string)$response->getBody(), true);
+
+          // $this->stdout()
+          $this->stdout("[PROCESS] RM $rm\n");
+          $this->stdout((string)$response->getBody());
+
+
+          if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
+            $data_api = $result['data'] ?? [];
+            $obs_id_ihs = $data_api['observation_idIHS'] ?? null;
+
+            if ($obs_id_ihs) {
+              // 4. Save to Local DB
+              $now = date('Y-m-d H:i:s');
+              $dbLocal->createCommand()->insert('ssht_observation', [
+                'observation_idIHS' => $data_api['observation_idIHS'],
+                'encounter_idIHS' => $data_api['encounter_idIHS'],
+                'subject_idIHS' => $data_api['subject_idIHS'],
+                'obs_system' => $data_api['obs_system'],
+                'obs_code' => $data_api['obs_code'],
+                'obs_display' => $data_api['obs_display'],
+                'obs_value' => $data_api['obs_value'],
+                'date' => $data_api['date'],
+                'rm' => $rm,
+                'status' => $data_api['status'],
+                'created_at' => $now,
+                'category_system' => $data_api['category_system'],
+                'category_code' => $data_api['category_code'],
+                'category_display' => $data_api['category_display'],
+              ])->execute();
+
+              $this->stdout("[OK] RM: $rm | SR_ID: $obs_id_ihs\n");
+            }
+          } else {
+            $errMsg = $result['error'] ?? "Unknown Error";
+            $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
+          }
+          // end for mapping obs key
+        }
+        // end for encounter data
+      }
+    } catch (\Exception $e) {
+      $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
     }
   }
 }
