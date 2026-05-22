@@ -26,4 +26,6 @@ interface SshtApiQueryRepository
   // query-observation-diagnosticreport RAD
   // observation & diagnostic report RAD
   public static function queryObservationDanDiagnosticReportSimrsRadio(string $noradio);
+
+  public static function queryObservationRalan(string $tanggal, string $rm);
 }

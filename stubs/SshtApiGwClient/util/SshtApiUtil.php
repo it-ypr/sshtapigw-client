@@ -55,4 +55,51 @@ class SshtApiUtil
       preg_replace('/\n\s*\n/', "\n", $impression)
     ];
   }
+
+  /**
+   * parsing kolom textisi di tabel mr_medis_rtf
+   * @param mixed $text
+   * @return array<float|int|string>
+   */
+  public static function parseObservation($text)
+  {
+    $result = [];
+
+    // Tekanan Darah (TD)
+    if (preg_match('/TD\s*[:;]\s*(\d+)\s*\/\s*(\d+)/i', $text, $m)) {
+      $result['systolic'] = (int) $m[1];
+      $result['diastolic'] = (int) $m[2];
+    }
+
+    // Nadi / Denyut Jantung (N)
+    if (preg_match('/N\s*[:;]\s*(\d+)/i', $text, $m)) {
+      $result['heart_rate'] = (int) $m[1];
+    }
+
+    // 2026-05-22 19:21 - disable dulu anomali data di source simrs keyword penulisan tidak sesuai format..
+    // // Suhu tubuh (S)
+    // if (preg_match('/S\s*[:;]\s*([\d.]+)/i', $text, $m)) {
+    //   $result['body_temp'] = (float) $m[1];
+    // }
+
+    // Respiration Rate / Pernafasan (RR)
+    if (preg_match('/RR\s*[:;]\s*(\d+)/i', $text, $m)) {
+      $result['respiratory_rate'] = (int) $m[1];
+    }
+
+    // 2026-05-22 16:01 - disable di postman satusehat tidak ada sp02 
+    // // SpO2 
+    // if (preg_match('/SpO2\s*[:;]\s*(\d+)/i', $text, $m)) {
+    //   $result['spo2'] = (int) $m[1];
+    // }
+
+    // Kajian Umum (KU)
+    // if (preg_match('/KU\s*[:;]\s*(.+)/i', $text, $m))
+    // {
+    //   $line = trim(explode("\n", $m[1])[0]);
+    //   $result['general_condition'] = $line;
+    // }
+
+    return $result;
+  }
 }

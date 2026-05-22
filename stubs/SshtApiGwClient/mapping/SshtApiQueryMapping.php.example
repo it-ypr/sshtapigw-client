@@ -5,7 +5,7 @@ namespace common\services\SshtApiGwClient\mapping;
 use Yii;
 use yii\db\Query;
 use common\services\SshtApiGwClient\mapping\SshtApiQueryRepository;
-
+use common\services\SshtApiGwClient\util\SshtApiUtil;
 
 /**
  * class SshtApiQueryMapping()
@@ -37,8 +37,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'muser.idssht as dokter_ihs',
         'mpoli.idihs as lokasi_ihs',
         'tblnew.poli as poli',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan_ranap.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
-        // "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) SEPARATOR ';') as icd_codes",
+        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
         'MIN(tblnew.tglperiksa) as a_end',
         'MAX(tblnew.resep) as p_rawend'
       ])
@@ -57,8 +56,6 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->groupBy('tblnew.rm')
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
   }
-
-  public static function queryEncounterRanapSimrs($tgl_param) {}
 
   public static function queryEncounterUgdSimrs($tgl_param)
   {
@@ -99,7 +96,45 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->andWhere(['not', ['muser.idssht' => null]])
       ->groupBy('tblnew.rm')
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
+  }
 
+  public static function queryEncounterRanapSimrs($tgl_param)
+  {
+    $dbSimrs = Yii::$app->db; // dbSimrs
+
+    // $subQuery = (new Query())
+    //   ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
+    //   ->from('mr_periksa_poli')
+    //   ->where("tanggal LIKE '$tgl_param%'")
+    //   // ->where(['like', 'tanggal', $tgl_param . '%', false])
+    //   ->groupBy('Id');
+
+    return (new Query())
+      ->select([
+        'mr_ranap.*',
+        'TRIM(mr_ktp.ktp) as ktp',
+        'TRIM(mmr.nama) as pasien_nama',
+        'TRIM(muser.nm_user) as dokter_nama',
+        'muser.idssht as dokter_ihs',
+        // 'mpoli.idihs as lokasi_ihs',
+        'tblnew.poli as poli',
+        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan_ranap.icd) SEPARATOR ';') as icd_codes",
+        // 'MIN(tblnew.tglperiksa) as a_end',
+        // 'MAX(tblnew.resep) as p_rawend'
+      ])
+      ->from('mr_ranap')
+      ->innerJoin('mr_kunjungan_ranap', 'mr_ranap.noregis = mr_kunjungan_ranap.noregis')
+      // ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
+      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
+      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
+      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
+      ->where("mr_ranap.tglmasuk LIKE '$tgl_param%'")
+      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
+      ->andWhere(['like', 'mr_kunjungan_ranap.tglmasuk', $tgl_param . '%', false])
+      ->andWhere(['not', 'mr_ranap.tglkeluar', '0000-00-00 00:00:00'])
+      ->andWhere(['not', ['muser.idssht' => null]])
+      ->groupBy(['mr_ranap.noregis'])
+      ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
   }
 
   // query-servicerequest
@@ -132,9 +167,63 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ->one($dbSimrs);
     } elseif ($encounter_class == "INP") {
     } elseif ($encounter_class == "EMER") {
+      return (new Query())
+        ->select([
+          'rd_order_poli.*',
+          'rd_biodata.noregis',
+          'rd_biodata.dnkirim',
+          'rd_biodata.dkirim',
+          'trim(rd_biodata.dperiksa) as dperiksa',
+          'muser.nm_user',
+          'muser.idssht',
+          'rd_daftar_periksa.loinc'
+        ])
+        ->from('rd_order_poli')
+        ->leftJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
+        ->leftJoin('muser', 'rd_biodata.dperiksa = muser.nik')
+        ->leftJoin('rd_daftar_periksa', 'rd_order_poli.kode = rd_daftar_periksa.kode')
+        ->where([
+          'rd_order_poli.rm' => $rm,
+          'rd_order_poli.tanggal' => $tgl_param,
+          'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
+          'rd_biodata.noregis' => ''
+        ])
+        ->one($dbSimrs);
     } else {
       return ['status' => false, 'message' => 'false encounter_class value!!'];
     }
+  }
+
+  // public static function queryGetLocationSimrs(string $location_idIHS)
+  // {
+  //   $dbSimrs = Yii::$app->db;
+  //
+  //   return (new Query())
+  //     ->select(['m.Id', 'm.poli', 'm.idihs', 'm.nama'])
+  //     ->from('mpoli m')
+  //     ->where([
+  //       'm.idihs' => $location_idIHS,
+  //     ])
+  //     ->orderBy("m.Id ASC")
+  //     ->all($dbSimrs);
+  // }
+
+  public static function queryConditionSimrs(string $tgl_param, string $rm, string $dok, string $poli_idihs)
+  {
+    $dbSimrs = Yii::$app->db;
+
+    return (new Query())
+      ->select(['k.Id', 'k.rm', 'k.icd', 'k.dok', 'k.poli', 'mpoli.idssht'])
+      ->from('mr_kunjungan k')
+      ->leftJoin('mpoli', 'k.poli = mpoli.poli')
+      ->where([
+        'k.rm' => $rm,
+        'k.dok' => $dok,
+        'k.tanggal' => $tgl_param,
+        'mpoli.idssht' => $poli_idihs,
+      ])
+      ->orderBy("Id ASC")
+      ->all($dbSimrs);
   }
 
   // query-observation-diagnosticreport RAD
@@ -150,5 +239,57 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->where(['h.noradio' => $noradio, 'h.ondelete' => 0])
       ->one($dbSimrs);
   }
-}
 
+  /**
+   * Query lokal observation rawat jalan
+   * @param string $tanggal
+   */
+  public static function queryObservationRalan(string $tanggal, string $rm)
+  {
+    $db1 = Yii::$app->db;
+
+    $result = (new Query())
+      ->select([
+        't1.Id',
+        't1.rm',
+        't2.nama',
+        't1.tanggal',
+        't1.dokter',
+        't1.poli',
+        't3.rl_user',
+        't1.jenis',
+        't1.textisi',
+      ])
+      ->from(['t1' => 'mr_medis_rtf'])
+      ->leftJoin(['t2' => 'mmr'], 't1.rm = t2.rm')
+      ->leftJoin(['t3' => 'muser'], 't1.dokter = t3.id_user')
+      ->where([
+        't1.tanggal' => $tanggal,
+        't1.rm' => $rm,
+        't1.jenis' => 'KO'
+      ])
+      ->one($db1);
+
+    if (!$result) {
+      return false;
+    }
+
+    $data['tanggal'] = $result['tanggal'];
+    $data['rm'] = $result['rm'];
+    $data['nama'] = $result['nama'];
+    $data['kode_dokter'] = $result['dokter'];
+    $data['nama_dokter'] = $result['rl_user'];
+    $data['jenis'] = $result['jenis'];
+    $data['poli'] = $result['poli'];
+
+    // parse kolom texisi
+    // $data['td_sistolik'] = $result['dsfasdfad'];
+    // $data['td_diastolik'] = $result['dsfasdfad'];
+    // $data['suhu_tubuh'] = $result['dsfasdfad'];
+    // $data['denyut_jantung'] = $result['dsfasdfad'];
+    // $data['pernafasan'] = $result['dsfasdfad'];
+    $data['observation_data'] = SshtApiUtil::parseObservation($result['textisi']);
+
+    return $data;
+  }
+}
