@@ -1173,13 +1173,11 @@ class SshtApiClientController extends Controller
           'systolic' => 'tdsys',
           'diastolic' => 'tddias',
           'heart_rate' => 'nadi',
-          // 2026-05-22 19:22 - disable dulu anomali data di source simrs keyword penulisan tidak sesuai format..
-          // 'body_temp' => 'suhu',
+          'body_temp' => 'suhu',
           'respiratory_rate' => 'nafas',
         ];
 
         $obsdata = $simrsobs['observation_data'];
-
 
         foreach ($mapping as $key => $obsName) {
 
@@ -1217,7 +1215,6 @@ class SshtApiClientController extends Controller
           // $this->stdout()
           $this->stdout("[PROCESS] RM $rm\n");
           $this->stdout((string)$response->getBody());
-
 
           if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
             $data_api = $result['data'] ?? [];
