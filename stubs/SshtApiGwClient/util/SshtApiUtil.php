@@ -65,40 +65,43 @@ class SshtApiUtil
   {
     $result = [];
 
-    // Tekanan Darah (TD)
-    if (preg_match('/TD\s*[:;]\s*(\d+)\s*\/\s*(\d+)/i', $text, $m)) {
-      $result['systolic'] = (int) $m[1];
-      $result['diastolic'] = (int) $m[2];
+    // TD
+    if (preg_match('/^\s*(TD|Tensi|BP)\s*[:;]\s*(\d+)\s*\/\s*(\d+)/im', $text, $m)) {
+      $result['systolic'] = (int)$m[2];
+      $result['diastolic'] = (int)$m[3];
     }
 
-    // Nadi / Denyut Jantung (N)
-    if (preg_match('/N\s*[:;]\s*(\d+)/i', $text, $m)) {
-      $result['heart_rate'] = (int) $m[1];
+    // Heart rate - Nadi
+    if (preg_match('/^\s*(N|Nadi)\s*[:;]\s*(\d+)/im', $text, $m)) {
+      $result['heart_rate'] = (int)$m[2];
     }
 
-    // 2026-05-22 19:21 - disable dulu anomali data di source simrs keyword penulisan tidak sesuai format..
-    // // Suhu tubuh (S)
-    // if (preg_match('/S\s*[:;]\s*([\d.]+)/i', $text, $m)) {
-    //   $result['body_temp'] = (float) $m[1];
-    // }
+    // Temperature - Suhu (S)
+    if (preg_match('/^\s*(S|Suhu)\s*[:;]\s*([\d.]+)/im', $text, $m)) {
+      $result['body_temp'] = (float)$m[2];
+    }
 
     // Respiration Rate / Pernafasan (RR)
     if (preg_match('/RR\s*[:;]\s*(\d+)/i', $text, $m)) {
       $result['respiratory_rate'] = (int) $m[1];
     }
 
-    // 2026-05-22 16:01 - disable di postman satusehat tidak ada sp02 
-    // // SpO2 
-    // if (preg_match('/SpO2\s*[:;]\s*(\d+)/i', $text, $m)) {
-    //   $result['spo2'] = (int) $m[1];
-    // }
+    // GDS
+    if (preg_match('/^\s*GDS\s*[:;]\s*(\d+)/im', $text, $m)) {
+      $result['gds'] = (int)$m[1];
+    }
 
-    // Kajian Umum (KU)
-    // if (preg_match('/KU\s*[:;]\s*(.+)/i', $text, $m))
-    // {
-    //   $line = trim(explode("\n", $m[1])[0]);
-    //   $result['general_condition'] = $line;
-    // }
+    // // // SpO2
+    // // if (preg_match('/SpO2\s*[:;]\s*(\d+)/i', $text, $m)) {
+    // //   $result['spo2'] = (int) $m[1];
+    // // }
+    //
+    // // Kajian Umum (KU)
+    // // if (preg_match('/KU\s*[:;]\s*(.+)/i', $text, $m))
+    // // {
+    // //   $line = trim(explode("\n", $m[1])[0]);
+    // //   $result['general_condition'] = $line;
+    // // }
 
     return $result;
   }
