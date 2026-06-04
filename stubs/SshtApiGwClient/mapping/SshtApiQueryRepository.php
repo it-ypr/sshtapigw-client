@@ -28,4 +28,6 @@ interface SshtApiQueryRepository
   public static function queryObservationDanDiagnosticReportSimrsRadio(string $noradio);
 
   public static function queryObservationRalan(string $tanggal, string $rm);
+
+  public static function queryProcedureGeneral(string $tanggal, string $rm);
 }

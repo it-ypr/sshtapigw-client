@@ -292,4 +292,66 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return $data;
   }
+
+  public static function queryProcedureGeneral(string $tanggal, string $rm)
+  {
+    $db1 = Yii::$app->db;
+    $result = (new Query())
+      ->select([
+        't2.tanggal',
+        't2.rm',
+        't3.nama',
+        't1.id_casemix',
+        't2.Id',
+        't1.kode_icd',
+        't1.procedure',
+        't2.dokter',
+        't4.rl_user',
+        't2.poli',
+      ])
+      ->from(['t1' => 'mr_casemix_ralan_pc'])
+      ->leftJoin(['t2' => 'mr_casemix_ralan'], 't1.id_casemix = t2.Id')
+      ->leftJoin(['t3' => 'mmr'], 't2.rm = t3.rm')
+      ->leftJoin(['t4' => 'muser'], 't2.dokter = t4.id_user')
+      ->where([
+        't2.tanggal' => $tanggal,
+        't2.rm' => $rm,
+      ])
+      ->all($db1);
+
+    if (!$result) {
+      return false;
+    }
+
+    $first = $result[0];
+    $procedures = [];
+    $seen = [];
+
+    foreach ($result as $row) {
+      $icd9 = trim((string) $row['kode_icd']);
+      $desc = trim((string) $row['procedure']);
+      $key = $icd9 . "\0" . $desc;
+
+      if (isset($seen[$key])) {
+        continue;
+      }
+
+      $seen[$key] = true;
+      $procedures[] = [
+        'icd9' => $icd9,
+        'desc' => $desc,
+      ];
+    }
+
+    $data['tanggal'] = $first['tanggal'];
+    $data['rm_pasien'] = $first['rm'];
+    $data['nama_pasien'] = $first['nama'];
+    $data['kode_dokter'] = $first['dokter'];
+    $data['nama_dokter'] = $first['rl_user'];
+    $data['procedures'] = $procedures;
+    $data['kode_poli'] = $first['poli'];
+
+    return $data;
+  }
 }
+
