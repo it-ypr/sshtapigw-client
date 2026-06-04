@@ -49,6 +49,42 @@ class SshtApiClientController extends Controller
       ->all(\Yii::$app->dbsshtterminologi);
   }
 
+  private function parseIcd9Codes($rawCodes)
+  {
+    if (empty($rawCodes)) return [];
+
+    // $mapping = [
+    //   "R50.0" => "R50",
+    //   // "A01.0" => "A01",
+    //   // "Z00.0" => "Z00",
+    // ];
+
+    // $mapping = ["" => ""];
+    //
+    // $codes = explode(';', $rawCodes);
+    // $normalizedCodes = [];
+    //
+    // foreach ($codes as $c) {
+    //   $clean = trim(preg_replace('/[^a-zA-Z0-9.]/', '', $c));
+    //   if (!$clean) continue;
+    //
+    //   if (isset($mapping[$clean])) {
+    //     $clean = $mapping[$clean];
+    //   }
+    //   $normalizedCodes[] = $clean;
+    // }
+
+    // $uniqueCodes = array_unique($normalizedCodes);
+
+    // Query menggunakan database terminologi
+    return (new \yii\db\Query())
+      ->select(['code', 'display'])
+      ->from('icd9')
+      // ->where(['code' => $uniqueCodes])
+      ->where(['code' => $rawCodes])
+      ->one(\Yii::$app->dbsshtterminologi);
+  }
+
   private function generateEncounterTimes($a_end)
   {
     $ts_end = strtotime($a_end);
@@ -68,6 +104,19 @@ class SshtApiClientController extends Controller
     echo "Hi.. \n";
     echo "config load: " . json_encode($config) . "\n";
     // return ExitCode::OK;
+  }
+
+  public static function actionEncounterRalanTest($tgl_param)
+  {
+    $dataEncounter = SshtApiQueryMapping::queryEncounterRalanSimrs($tgl_param);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($dataEncounter) . " data.\n";
+    print_r($dataEncounter[0]);
   }
 
 
@@ -480,188 +529,187 @@ class SshtApiClientController extends Controller
    */
   public function actionSendEncounterFinishRalan($tgl_param)
   {
-    // [inprogress] baru pindah logic dari python ke yii2 console..
-    // // $classEnc = 'AMB';
-    // $dbLocal = Yii::$app->sshtAPIdb;
-    // $config = SshtApiBase::getConfig();
-    // $debugger = new SshtApiDebugger(
-    //   enabled: $config['debug']
-    // );
-    // echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
-    // $encounter = (new Query())
-    //   ->select([
-    //     'idIHS',
-    //     'subject_rm',
-    //     'subject_idIHS',
-    //     'subject_nama',
-    //     'practition_lokalid',
-    //     'practition_idIHS',
-    //     'practition_nama',
-    //     'location_idIHS',
-    //     'location_nama',
-    //     'arrived_start',
-    //     'arrived_end',
-    //     'inprogress_start',
-    //     'inprogress_end',
-    //     'finish_start',
-    //     'finish_end',
-    //     'class'
-    //   ])->from('ssht_encounter')
-    //   ->where(['like', 'arrived_start', $tgl_param . '%', false])
-    //   ->all($dbLocal);
-    //
-    // foreach ($encounter as $record) {
-    //   // --- DEBUG & CONFIRMATION ---
-    //   if (!$debugger->allow(
-    //     context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
-    //     payload: $record['idIHS'],
-    //   )) {
-    //     continue;
-    //   }
-    //   $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
-    //   $resEnc = json_decode((string) $resEncReq->getBody(), true);
-    //   $resEncData = isset($resEnc['data']) ? $resEnc['data'] : [];
-    //   $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
-    //
-    //   echo "\nData Encounter Get: \n";
-    //   print_r($resEnc);
-    //
-    //   // if (!$debugger->allow(
-    //   //   context: ['method' => 'Updated Class Encounter di local?'],
-    //   //   payload: $encounterIhsId,
-    //   // )) {
-    //   //   continue;
-    //   // }
-    //   //
-    //   // sleep(1);
-    //
-    //   if ($resEncReq->getStatusCode() == 200 && $resEnc['status'] == 'true') {
-    //     // $payload = [
-    //     //   'idIHS' => $resEncData['idIHS'],
-    //     //   'arrived_start' => $resEncData['arrived_start'],
-    //     //   'arrived_end' => $resEncData['arrived_end'],
-    //     //   'inprogress_start' => $resEncData['inprogress_start'],
-    //     //   'inprogress_end' => $resEncData['inprogress_end'],
-    //     //   'finish_start' => $resEncData['finish_start'],
-    //     //   'finish_end' => $resEncData['finish_end'],
-    //     //   'class' => $resEncData['class']
-    //     // ];
-    //     //
-    //     // $dbLocal->createCommand()->update('ssht_encounter', $payload, ['idIHS' => $encounterIhsId])->execute();
-    //
-    //     // $getconditionsSimrs = SshtApiQueryMapping::queryConditionSimrs(
-    //     //   tgl_param: $tgl_param,
-    //     //   rm: $record['subject_rm'],
-    //     //   dok: $record['practition_lokalid'],
-    //     //   poli_idihs: $record['location_idIHS']
-    //     // );
-    //
-    //     $dbSimrs = Yii::$app->db;
-    //
-    //     $getconditionsSimrs = (new Query())
-    //       ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
-    //       ->from('mr_kunjungan k')
-    //       ->leftJoin('mpoli', 'k.poli = mpoli.poli')
-    //       ->where([
-    //         'k.rm' => $record['subject_rm'],
-    //         'k.dokter' => $record['practition_lokalid'],
-    //         'k.tanggal' => $tgl_param,
-    //         'mpoli.idihs' => $record['location_idIHS'],
-    //       ])
-    //       ->orderBy("Id ASC")
-    //       ->all($dbSimrs);
-    //
-    //     $getConditionLocal = (new Query())
-    //       ->select([
-    //         'condition_idIHS',
-    //         'encounter_idIHS',
-    //         'code',
-    //         'display',
-    //         'conditionRank'
-    //       ])->from('ssht_condition')
-    //       ->where(['encounter_idIHS' => $encounterIhsId])
-    //       ->all($dbLocal);
-    //
-    //     // // --- DEBUG & CONFIRMATION ---
-    //     // if (!$debugger->allow(
-    //     //   context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET_BY_ENCOUNTER),
-    //     //   payload: $record['idIHS'],
-    //     // )) {
-    //     //   continue;
-    //     // }
-    //
-    //     // 1. Ambil urutan ICD dari SIMRS sebagai acuan utama
-    //     // Kita bersihkan karakter non-alphanumeric agar 'I24.9' dan 'I249' tetap cocok
-    //     $simrsOrder = [];
-    //     foreach ($getconditionsSimrs as $index => $row) {
-    //       $cleanIcd = preg_replace('/[^A-Za-z0-9]/', '', $row['icd']);
-    //       $simrsOrder[$cleanIcd] = $index + 1; // Rank dimulai dari 1
-    //     }
-    //
-    //     // 2. Map data lokal berdasarkan acuan di atas
-    //     $diagnosis = array_map(function ($localItem) use ($simrsOrder) {
-    //       $cleanLocalCode = preg_replace('/[^A-Za-z0-9]/', '', $localItem['code']);
-    //
-    //       // Cari rank berdasarkan urutan di SIMRS
-    //       $rank = isset($simrsOrder[$cleanLocalCode]) ? $simrsOrder[$cleanLocalCode] : 99;
-    //
-    //       return [
-    //         'condition_idIHS' => $localItem['condition_idIHS'],
-    //         'code'            => $localItem['code'],
-    //         'display'         => $localItem['display'],
-    //         'conditionRank'   => (string) $rank,
-    //       ];
-    //     }, $getConditionLocal);
-    //
-    //     // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
-    //     usort($diagnosis, function ($a, $b) {
-    //       return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
-    //     });
-    //
-    //     $payloadEncounterFinish = [
-    //       'encounter_idIHS' => $encounterIhsId,
-    //       'patient_idIHS' => $record['subject_idIHS'],
-    //       'patient_nama' => $record['subject_nama'],
-    //
-    //       'practition_idIHS' => $record['practition_idIHS'],
-    //       'practition_nama' => $record['practition_nama'],
-    //
-    //       'location_idIHS' => $record['location_idIHS'],
-    //       'location_nama' => $record['location_nama'],
-    //
-    //       'diagnosis' => $diagnosis,
-    //
-    //       'arrived_start' => $record['arrived_start'],
-    //       'arrived_end' => $record['arrived_end'],
-    //
-    //       'inprogress_start' => $record['inprogress_start'],
-    //       'inprogress_end' => $record['inprogress_end'],
-    //
-    //       'finish_start' => $record['finish_start'],
-    //       'finish_end' => $record['finish_end'],
-    //
-    //       'class' => $resEncData['class'],
-    //     ];
-    //
-    //     // --- DEBUG & CONFIRMATION ---
-    //     if (!$debugger->allow(
-    //       context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
-    //       payload: $payloadEncounterFinish,
-    //     )) {
-    //       continue;
-    //     }
-    //
-    //     // $encounterFinish = SshtApiBase::request(SshtApiUrl::ENCOUNTER_FINISH, ['json' => $payloadEncounterFinish]);
-    //
-    //     // if ($encounterFinish->getStatusCode() == 200 || $encounterFinish->getStatusCode() == 201) {
-    //     // }
-    //
-    //
-    //     // end if encounter get
-    //   }
-    //   // end foreach $encounter record
-    // }
-    // echo "\n--- TASK BOT DONE ---\n";
+    // $classEnc = 'AMB';
+    $dbLocal = Yii::$app->sshtAPIdb;
+    $config = SshtApiBase::getConfig();
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+    echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
+    $encounter = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'subject_nama',
+        'practition_lokalid',
+        'practition_idIHS',
+        'practition_nama',
+        'location_idIHS',
+        'location_nama',
+        'arrived_start',
+        'arrived_end',
+        'inprogress_start',
+        'inprogress_end',
+        'finish_start',
+        'finish_end',
+        'class'
+      ])->from('ssht_encounter')
+      ->where(['like', 'arrived_start', $tgl_param . '%', false])
+      ->all($dbLocal);
+
+    foreach ($encounter as $record) {
+      // --- DEBUG & CONFIRMATION ---
+      if (!$debugger->allow(
+        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+        payload: $record['idIHS'],
+      )) {
+        continue;
+      }
+      $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
+      $resEnc = json_decode((string) $resEncReq->getBody(), true);
+      $resEncData = isset($resEnc['data']) ? $resEnc['data'] : [];
+      $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+
+      echo "\nData Encounter Get: \n";
+      print_r($resEnc);
+
+      // if (!$debugger->allow(
+      //   context: ['method' => 'Updated Class Encounter di local?'],
+      //   payload: $encounterIhsId,
+      // )) {
+      //   continue;
+      // }
+      //
+      // sleep(1);
+
+      if ($resEncReq->getStatusCode() == 200 && $resEnc['status'] == 'true') {
+        // $payload = [
+        //   'idIHS' => $resEncData['idIHS'],
+        //   'arrived_start' => $resEncData['arrived_start'],
+        //   'arrived_end' => $resEncData['arrived_end'],
+        //   'inprogress_start' => $resEncData['inprogress_start'],
+        //   'inprogress_end' => $resEncData['inprogress_end'],
+        //   'finish_start' => $resEncData['finish_start'],
+        //   'finish_end' => $resEncData['finish_end'],
+        //   'class' => $resEncData['class']
+        // ];
+        //
+        // $dbLocal->createCommand()->update('ssht_encounter', $payload, ['idIHS' => $encounterIhsId])->execute();
+
+        // $getconditionsSimrs = SshtApiQueryMapping::queryConditionSimrs(
+        //   tgl_param: $tgl_param,
+        //   rm: $record['subject_rm'],
+        //   dok: $record['practition_lokalid'],
+        //   poli_idihs: $record['location_idIHS']
+        // );
+
+        $dbSimrs = Yii::$app->db;
+
+        $getconditionsSimrs = (new Query())
+          ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+          ->from('mr_kunjungan k')
+          ->leftJoin('mpoli', 'k.poli = mpoli.poli')
+          ->where([
+            'k.rm' => $record['subject_rm'],
+            'k.dokter' => $record['practition_lokalid'],
+            'k.tanggal' => $tgl_param,
+            'mpoli.idihs' => $record['location_idIHS'],
+          ])
+          ->orderBy("Id ASC")
+          ->all($dbSimrs);
+
+        $getConditionLocal = (new Query())
+          ->select([
+            'condition_idIHS',
+            'encounter_idIHS',
+            'code',
+            'display',
+            'conditionRank'
+          ])->from('ssht_condition')
+          ->where(['encounter_idIHS' => $encounterIhsId])
+          ->all($dbLocal);
+
+        // // --- DEBUG & CONFIRMATION ---
+        // if (!$debugger->allow(
+        //   context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET_BY_ENCOUNTER),
+        //   payload: $record['idIHS'],
+        // )) {
+        //   continue;
+        // }
+
+        // 1. Ambil urutan ICD dari SIMRS sebagai acuan utama
+        // Kita bersihkan karakter non-alphanumeric agar 'I24.9' dan 'I249' tetap cocok
+        $simrsOrder = [];
+        foreach ($getconditionsSimrs as $index => $row) {
+          $cleanIcd = preg_replace('/[^A-Za-z0-9]/', '', $row['icd']);
+          $simrsOrder[$cleanIcd] = $index + 1; // Rank dimulai dari 1
+        }
+
+        // 2. Map data lokal berdasarkan acuan di atas
+        $diagnosis = array_map(function ($localItem) use ($simrsOrder) {
+          $cleanLocalCode = preg_replace('/[^A-Za-z0-9]/', '', $localItem['code']);
+
+          // Cari rank berdasarkan urutan di SIMRS
+          $rank = isset($simrsOrder[$cleanLocalCode]) ? $simrsOrder[$cleanLocalCode] : 99;
+
+          return [
+            'condition_idIHS' => $localItem['condition_idIHS'],
+            'code'            => $localItem['code'],
+            'display'         => $localItem['display'],
+            'conditionRank'   => (string) $rank,
+          ];
+        }, $getConditionLocal);
+
+        // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
+        usort($diagnosis, function ($a, $b) {
+          return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
+        });
+
+        $payloadEncounterFinish = [
+          'encounter_idIHS' => $encounterIhsId,
+          'patient_idIHS' => $record['subject_idIHS'],
+          'patient_nama' => $record['subject_nama'],
+
+          'practition_idIHS' => $record['practition_idIHS'],
+          'practition_nama' => $record['practition_nama'],
+
+          'location_idIHS' => $record['location_idIHS'],
+          'location_nama' => $record['location_nama'],
+
+          'diagnosis' => $diagnosis,
+
+          'arrived_start' => $record['arrived_start'],
+          'arrived_end' => $record['arrived_end'],
+
+          'inprogress_start' => $record['inprogress_start'],
+          'inprogress_end' => $record['inprogress_end'],
+
+          'finish_start' => $record['finish_start'],
+          'finish_end' => $record['finish_end'],
+
+          'class' => $resEncData['class'],
+        ];
+
+        // --- DEBUG & CONFIRMATION ---
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
+          payload: $payloadEncounterFinish,
+        )) {
+          continue;
+        }
+
+        // $encounterFinish = SshtApiBase::request(SshtApiUrl::ENCOUNTER_FINISH, ['json' => $payloadEncounterFinish]);
+
+        // if ($encounterFinish->getStatusCode() == 200 || $encounterFinish->getStatusCode() == 201) {
+        // }
+
+
+        // end if encounter get
+      }
+      // end foreach $encounter record
+    }
+    echo "\n--- TASK BOT DONE ---\n";
   }
 
   public function actionSendCondition($tgl_param) {}
@@ -1253,5 +1301,168 @@ class SshtApiClientController extends Controller
     } catch (\Exception $e) {
       $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
     }
+  }
+
+  /**
+   * php yii ssht-api-client/procedure-general-test 2025-09-27 055129 
+   */
+  public function actionProcedureGeneralTest(string $tanggal, string $rm)
+  {
+    $simrsobs = SshtApiQueryMapping::queryProcedureGeneral($tanggal, $rm);
+    if ($simrsobs) {
+      print_r($simrsobs);
+    } else {
+      echo "\ntidak ditemukan data procedure.\n";
+    }
+  }
+
+  /**
+   * php yii ssht-api-client/send-procedure-general-ralan 2026-05-01
+   */
+  public function actionSendProcedureGeneralRalan($tgl_param)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
+
+    try {
+
+      $encounters = (new Query())
+        ->select(['idIHS', 'subject_rm', 'practition_idIHS', 'inprogress_start', 'class'])
+        ->from('ssht_encounter')
+        ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        ->andWhere(['class' => 'AMB'])
+        ->all($dbLocal);
+
+      if (empty($encounters)) {
+        $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+        return;
+      }
+
+      print_r($encounters);
+
+      foreach ($encounters as $enc) {
+
+        $rm = $enc['subject_rm'];
+
+        $simrs = SshtApiQueryMapping::queryProcedureGeneral($tgl_param, $rm);
+
+        if (!$simrs) {
+          $this->stdout("[-] SKIP: RM $rm tydac ada ProcedureGeneral\n");
+          continue;
+        }
+
+        print_r($simrs);
+        // $this->stdout("[>] simrs-query: \n");
+        // $this->stdout($simrs);
+        // $this->stdout("\n");
+
+        $mapping = [
+          'icd9' => 'proc_code',
+          // 'desc' => 'proc_display',
+        ];
+
+        $pdata = $simrs['procedures'];
+
+        // print_r('pdata');
+        print_r($pdata);
+        // $this->stdout($pdata);
+
+        foreach ($pdata as $p) {
+
+          foreach ($mapping as $key => $obsName) {
+
+            if (!isset($p[$key])) {
+              continue;
+            }
+
+            $icdList = $this->parseIcd9Codes($p[$key]);
+
+            print_r('ini icdList');
+            print_r($icdList);
+
+            if (!$icdList) {
+              $this->stdout("[-] SKIP: RM $rm icd9: " . $p[$key] . " tydac Tidak Valid (ICD-9 CM 2010) \n");
+              continue;
+            }
+
+            // payload Procedure
+            $payloadProcedure = [
+              "encounterIdIHS" => $enc['idIHS'] ?? "",
+              "proc_code" => $icdList['code'] ?? "", // if general proc icd-9 code elif diagnostik
+              "proc_display" => $icdList['display'] ?? "", // if general proc icd-9 display
+              "status" => "completed", // completed, entered-in-error, not-done, in-progres
+              "category" => "general", // general, edukasi dkk,
+              "dok" => $simrs['kode_dokter'] ?? "", // nik dokter
+              "rm" => $simrs['rm_pasien'] ?? "", // rm local
+              "datetime" => $enc['inprogress_start'] ?? "" // bisa pake inprogress_start
+            ];
+
+            // --- DEBUG & CONFIRMATION ---
+            if (!$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::PROCEDURE_CREATE),
+              payload: $payloadProcedure,
+            )) {
+              continue;
+            }
+
+            $resProcReq = SshtApiBase::request(SshtApiUrl::PROCEDURE_CREATE, ['json' => $payloadProcedure]);
+
+            $resProc = json_decode((string) $resProcReq->getBody(), true);
+
+            // print_r($resProcReq->getBody());
+            $this->stdout("[+] body-response: \n");
+            print_r($resProc);
+            // $this->stdout("$resProc \n");
+            // echo "   > Procedure OK: $resProc\n";
+            exit;
+
+            // 2026-06-04 08:58 - disable dulu testing body response..
+            // $procedureIhsId = $resEnc['data']['procedure_idIHS'] ?? null;
+            // sleep(1);
+            //
+            // if ($procedureIhsId) {
+            //   $procData = $resProc['data'];
+            //
+            //   \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_procedure', [
+            //     'procedure_idIHS' => $procedureIhsId,
+            //     'encounter_idIHS' => $enc['idIHS'],
+            //     'code'            => $resProc['code'],
+            //     'display'         => $resProc['display'],
+            //     'category_code'   => $resProc['category_code'],
+            //     'category_display' => $resProc['category_display'],
+            //     'subject_idIHS'   => $resProc['subject_idIHS'],
+            //     'practition_idIHS' => $resProc['practition_idIHS'],
+            //     'rm'              => $resProc['rm'],
+            //     'dok'             => $resProc['dok'],
+            //     'date'            => $resProc['date'],
+            //     'created_at'      => date('Y-m-d H:i:s'),
+            //     'updated_at'      => date('Y-m-d H:i:s')
+            //   ])->execute();
+            //
+            //   echo "   > Procedure OK: " . ($procedureIhsId ?? 'FAILED') . " ({$icdList['code']})\n";
+            //   print_r($procData);
+            // } else {
+            //   echo " FAILED Procedure";
+            //   sleep(2);
+            // }
+          }
+        }
+        // end foreach encounter
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(5);
+    }
+    // jeda rate limit gateway
+    sleep(2);
+    // end foreach $dataProcedure
   }
 }
