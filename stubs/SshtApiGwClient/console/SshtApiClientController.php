@@ -1304,7 +1304,7 @@ class SshtApiClientController extends Controller
   }
 
   /**
-   * php yii ssht-api-client/procedure-general-test 2025-09-27 055129 
+   * php yii ssht-api-client/procedure-general-test 2025-09-27 055129
    */
   public function actionProcedureGeneralTest(string $tanggal, string $rm)
   {
@@ -1365,7 +1365,7 @@ class SshtApiClientController extends Controller
 
         $mapping = [
           'icd9' => 'proc_code',
-          // 'desc' => 'proc_display',
+          'desc' => 'proc_display',
         ];
 
         $pdata = $simrs['procedures'];
@@ -1376,83 +1376,91 @@ class SshtApiClientController extends Controller
 
         foreach ($pdata as $p) {
 
-          foreach ($mapping as $key => $obsName) {
+          // foreach ($mapping as $key => $obsName) {
+          //
+          //   if (!isset($p[$key])) {
+          //     continue;
+          //   }
 
-            if (!isset($p[$key])) {
-              continue;
-            }
+          // $icdList = $this->parseIcd9Codes($p[$key]);
+          // //
+          // print_r('ini icdList');
+          // print_r($icdList);
+          // //
+          // if (!$icdList) {
+          //   $this->stdout("[-] SKIP: RM $rm icd9: " . $p[$key] . " tydac Tidak Valid (ICD-9 CM 2010) \n");
+          //   continue;
+          // }
 
-            $icdList = $this->parseIcd9Codes($p[$key]);
+          // payload Procedure
+          $payloadProcedure = [
+            "encounterIdIHS" => $enc['idIHS'] ?? "",
+            // "proc_code" => $icdList['code'] ?? "", // if general proc icd-9 code elif diagnostik
+            // "proc_display" => $icdList['display'] ?? "", // if general proc icd-9 display
+            "proc_code" => $p['icd9'] ?? "", // if general proc icd-9 code elif diagnostik
+            "proc_display" => $p['desc'] ?? "", // if general proc icd-9 display
+            "status" => "completed", // completed, entered-in-error, not-done, in-progres
+            "category" => "general", // general, edukasi dkk,
+            "dok" => $simrs['kode_dokter'] ?? "", // nik dokter
+            "rm" => $simrs['rm_pasien'] ?? "", // rm local
+            "datetime" => $enc['inprogress_start'] ?? "" // bisa pake inprogress_start
+          ];
 
-            print_r('ini icdList');
-            print_r($icdList);
-
-            if (!$icdList) {
-              $this->stdout("[-] SKIP: RM $rm icd9: " . $p[$key] . " tydac Tidak Valid (ICD-9 CM 2010) \n");
-              continue;
-            }
-
-            // payload Procedure
-            $payloadProcedure = [
-              "encounterIdIHS" => $enc['idIHS'] ?? "",
-              "proc_code" => $icdList['code'] ?? "", // if general proc icd-9 code elif diagnostik
-              "proc_display" => $icdList['display'] ?? "", // if general proc icd-9 display
-              "status" => "completed", // completed, entered-in-error, not-done, in-progres
-              "category" => "general", // general, edukasi dkk,
-              "dok" => $simrs['kode_dokter'] ?? "", // nik dokter
-              "rm" => $simrs['rm_pasien'] ?? "", // rm local
-              "datetime" => $enc['inprogress_start'] ?? "" // bisa pake inprogress_start
-            ];
-
-            // --- DEBUG & CONFIRMATION ---
-            if (!$debugger->allow(
-              context: SshtApiUtil::genDebugContext(SshtApiUrl::PROCEDURE_CREATE),
-              payload: $payloadProcedure,
-            )) {
-              continue;
-            }
-
-            $resProcReq = SshtApiBase::request(SshtApiUrl::PROCEDURE_CREATE, ['json' => $payloadProcedure]);
-
-            $resProc = json_decode((string) $resProcReq->getBody(), true);
-
-            // print_r($resProcReq->getBody());
-            $this->stdout("[+] body-response: \n");
-            print_r($resProc);
-            // $this->stdout("$resProc \n");
-            // echo "   > Procedure OK: $resProc\n";
-            exit;
-
-            // 2026-06-04 08:58 - disable dulu testing body response..
-            // $procedureIhsId = $resEnc['data']['procedure_idIHS'] ?? null;
-            // sleep(1);
-            //
-            // if ($procedureIhsId) {
-            //   $procData = $resProc['data'];
-            //
-            //   \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_procedure', [
-            //     'procedure_idIHS' => $procedureIhsId,
-            //     'encounter_idIHS' => $enc['idIHS'],
-            //     'code'            => $resProc['code'],
-            //     'display'         => $resProc['display'],
-            //     'category_code'   => $resProc['category_code'],
-            //     'category_display' => $resProc['category_display'],
-            //     'subject_idIHS'   => $resProc['subject_idIHS'],
-            //     'practition_idIHS' => $resProc['practition_idIHS'],
-            //     'rm'              => $resProc['rm'],
-            //     'dok'             => $resProc['dok'],
-            //     'date'            => $resProc['date'],
-            //     'created_at'      => date('Y-m-d H:i:s'),
-            //     'updated_at'      => date('Y-m-d H:i:s')
-            //   ])->execute();
-            //
-            //   echo "   > Procedure OK: " . ($procedureIhsId ?? 'FAILED') . " ({$icdList['code']})\n";
-            //   print_r($procData);
-            // } else {
-            //   echo " FAILED Procedure";
-            //   sleep(2);
-            // }
+          // --- DEBUG & CONFIRMATION ---
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::PROCEDURE_CREATE),
+            payload: $payloadProcedure,
+          )) {
+            continue;
           }
+
+          $resProcReq = SshtApiBase::request(SshtApiUrl::PROCEDURE_CREATE, ['json' => $payloadProcedure]);
+
+          $resProc = json_decode((string) $resProcReq->getBody(), true);
+
+          // print_r($resProcReq->getBody());
+          $this->stdout("[+] body-response: \n");
+          print_r($resProc);
+          // $this->stdout("$resProc \n");
+          // echo "   > Procedure OK: $resProc\n";
+          // exit;
+
+          // if duplicate
+          if ($resProcReq->getStatusCode() == 400 && $resProc['errors']['code'] == 'duplicate') {
+            continue;
+          }
+
+          // 2026-06-04 08:58 - disable dulu testing body response..
+          $procedureIhsId = $resProc['data']['procedure_idIHS'] ?? null;
+          sleep(1);
+
+          if ($procedureIhsId) {
+            $procData = $resProc['data'];
+
+            \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_procedure', [
+              'procedure_idIHS' => $procedureIhsId,
+              'encounter_idIHS' => $enc['idIHS'],
+              'code'            => $procData['code'],
+              'display'         => $procData['display'],
+              'category_code'   => $procData['category_code'],
+              'category_display' => $procData['category_display'],
+              'subject_idIHS'   => $procData['subject_idIHS'],
+              'practition_idIHS' => $procData['practition_idIHS'],
+              'rm'              => $procData['rm'],
+              'dok'             => $procData['dok'],
+              'date'            => $procData['date'],
+              'created_at'      => date('Y-m-d H:i:s'),
+              'updated_at'      => date('Y-m-d H:i:s')
+            ])->execute();
+
+            // echo "   > Procedure OK: " . ($procedureIhsId ?? 'FAILED') . " ({$icdList['code']})\n";
+            echo "   > Procedure OK: " . ($procedureIhsId ?? 'FAILED') . " ({$p['icd9']} - {$p['desc']})\n";
+            print_r($procData);
+          } else {
+            echo " FAILED Procedure";
+            sleep(2);
+          }
+          // }
         }
         // end foreach encounter
       }
