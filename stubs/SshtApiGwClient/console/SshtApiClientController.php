@@ -1442,13 +1442,16 @@ class SshtApiClientController extends Controller
               'encounter_idIHS' => $enc['idIHS'],
               'code'            => $procData['code'],
               'display'         => $procData['display'],
+              'system'         => $procData['system'],
               'category_code'   => $procData['category_code'],
               'category_display' => $procData['category_display'],
+              'category_system' => $procData['category_system'],
               'subject_idIHS'   => $procData['subject_idIHS'],
               'practition_idIHS' => $procData['practition_idIHS'],
               'rm'              => $procData['rm'],
               'dok'             => $procData['dok'],
               'date'            => $procData['date'],
+              'status'          => $procData['status'],
               'created_at'      => date('Y-m-d H:i:s'),
               'updated_at'      => date('Y-m-d H:i:s')
             ])->execute();
