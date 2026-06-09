@@ -16,6 +16,82 @@ use Yii;
 
 class SshtApiClientController extends Controller
 {
+  /**
+   * Run: php yii ssht-api-client/send-task-ralan 2026-05-01
+   * crontab: 30 19 * * * php yii ssht-api-client/send-task-ralan "$(date -d 'yesterday' +%Y-%m-%d)"
+   * cron send on (h-1) now()-1day
+   */
+  public function actionSendTaskRalan(string $tgl_param)
+  {
+    // encounter & diagnosa
+    $this->actionSendEncounterRalan($tgl_param);
+    // observasi vital
+    $this->actionSendObservationRalan($tgl_param);
+    // general procedure
+    $this->actionSendProcedureGeneralRalan($tgl_param);
+    // serviceRequest Radiologi
+    $this->actionSendServiceRequestRadio($tgl_param);
+    // imagingStudy
+    $this->actionSendImagingStudy($tgl_param);
+    // observation & diagnosticReport Radiologi
+    $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
+    // medicationRequest & medicationDispense (inprogress)
+    // Lab - ServiceRequest (inprogress)
+    // Lab - Speciment (inprogress)
+    // Lab - Observation & DiagnosticReport (inprogress)
+    // EncounterFinish (inprogress)
+  }
+
+  /**
+   * Run: php yii ssht-api-client/send-task-ranap 2026-05-01
+   */
+  public function actionSendTaskRanap(string $tgl_param)
+  {
+    // RANAP - inprogress 
+    // // encounter & diagnosa
+    // $this->actionSendEncounterRanap($tgl_param);
+    // // observasi vital
+    // $this->actionSendObservationRanap($tgl_param);
+    // // general procedure
+    // $this->actionSendProcedureGeneralRanap($tgl_param);
+    // // serviceRequest Radiologi
+    // $this->actionSendServiceRequestRadio($tgl_param);
+    // // imagingStudy
+    // $this->actionSendImagingStudy($tgl_param);
+    // // observation & diagnosticReport Radiologi
+    // $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
+    // medicationRequest & medicationDispense (inprogress)
+    // Lab - ServiceRequest (inprogress)
+    // Lab - Speciment (inprogress)
+    // Lab - Observation & DiagnosticReport (inprogress)
+    // EncounterFinish (inprogress)
+  }
+
+  /**
+   * Run: php yii ssht-api-client/send-task-ugd 2026-05-01
+   */
+  public function actionSendTaskUgd(string $tgl_param)
+  {
+    // UGD - inprogress 
+    // // encounter & diagnosa
+    // $this->actionSendEncounterUgd($tgl_param);
+    // // observasi vital
+    // $this->actionSendObservationUgd($tgl_param);
+    // // general procedure
+    // $this->actionSendProcedureGeneralUgd($tgl_param);
+    // // serviceRequest Radiologi
+    // $this->actionSendServiceRequestRadio($tgl_param);
+    // // imagingStudy
+    // $this->actionSendImagingStudy($tgl_param);
+    // // observation & diagnosticReport Radiologi
+    // $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
+    // medicationRequest & medicationDispense (inprogress)
+    // Lab - ServiceRequest (inprogress)
+    // Lab - Speciment (inprogress)
+    // Lab - Observation & DiagnosticReport (inprogress)
+    // EncounterFinish (inprogress)
+  }
+
   private function parseIcdCodes($rawCodes)
   {
     if (empty($rawCodes)) return [];
