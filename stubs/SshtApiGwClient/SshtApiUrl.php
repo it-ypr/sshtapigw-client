@@ -11,7 +11,7 @@ class SshtApiUrl
   // Patients URL
   /**
    * Get Patient by NIK.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/resource/patients/get
    * Query Params:
@@ -24,8 +24,8 @@ class SshtApiUrl
    * Get Patient by data NIK.
    *
    * param: nik, nama & birthdate
-   * 
-   * Method: POST 
+   *
+   * Method: POST
    * URL: api/v1/ssht/resource/patients/data-nik
    * Body JSON:
    * {
@@ -39,9 +39,9 @@ class SshtApiUrl
   /**
    * Get Patient by data Gender.
    *
-   * param: nik, nama & gender 
-   * 
-   * Method: POST 
+   * param: nik, nama & gender
+   *
+   * Method: POST
    * URL: api/v1/ssht/resource/patients/data-nik
    * Body JSON:
    * {
@@ -55,7 +55,7 @@ class SshtApiUrl
   // Practition URL
   /**
    * Get Practition by NIK.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/resource/practitioner/get
    * Query Params:
@@ -65,7 +65,7 @@ class SshtApiUrl
 
   /**
    * Get Practition by idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/resource/practitioner/get
    * Query Params:
@@ -86,7 +86,7 @@ class SshtApiUrl
 
   /**
    * Get Location by location_idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/resource/location/get
    * Query Params:
@@ -100,7 +100,7 @@ class SshtApiUrl
   // Encounter URL
   /**
    * Get Encounter by encounter_idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/encounter/get
    * Query Params:
@@ -112,7 +112,7 @@ class SshtApiUrl
    * Create Encounter.
    *
    * Create Encounter auto inprogress_start for now..
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/encounter/create
    * Body JSON:
@@ -139,8 +139,8 @@ class SshtApiUrl
    * Finish Encounter.
    *
    * Finish Encounter/Kunjungan
-   * 
-   * Method: POST 
+   *
+   * Method: POST
    * URL: api/v1/ssht/encounter/finish
    * Body JSON:
    * {
@@ -183,7 +183,7 @@ class SshtApiUrl
   // Condition URL (DIAGNOSA)
   /**
    * Get Condition by condition_idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/condition/get
    * Query Params:
@@ -193,7 +193,7 @@ class SshtApiUrl
 
   /**
    * Get Condition by encounter_idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/condition/get-en
    * Query Params:
@@ -203,7 +203,7 @@ class SshtApiUrl
 
   /**
    * Create Condition.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/condition/create
    * Body JSON:
@@ -229,7 +229,7 @@ class SshtApiUrl
   /**
    * Create Observation Vital.
    *
-   * Method: POST 
+   * Method: POST
    * URL: api/v1/ssht/observation/vital/create
    * Body JSON:
    * {
@@ -258,7 +258,7 @@ class SshtApiUrl
   /**
    * Create Observation Radiologi.
    *
-   * Method: POST 
+   * Method: POST
    * URL: api/v1/ssht/observation/radio/create
    * Body JSON:
    * {
@@ -289,7 +289,7 @@ class SshtApiUrl
   /**
    * Create ServiceRequest Radiologi.
    *
-   * Method: POST 
+   * Method: POST
    * URL: api/v1/ssht/service-request/radio/create
    * Body JSON:
    * {
@@ -306,13 +306,13 @@ class SshtApiUrl
    *    "petugas_nama": "string (required) - nama petugas"
    * }
    */
-  public const SERVICE_REQUEST_CREATE_RAD = ['POST', 'ssht/service-request/create'];
+  public const SERVICE_REQUEST_CREATE_RAD = ['POST', 'ssht/service-request/radio/create'];
   public const SERVICE_REQUEST_UPDATE = "ssht/service-request/update";
 
   // ImagingStudy
   /**
    * Get Imaging by Date.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/imaging/get-bydate
    * Query Params:
@@ -322,7 +322,7 @@ class SshtApiUrl
 
   /**
    * Get Imaging Detail
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/imaging/get
    * Query Params:
@@ -348,7 +348,7 @@ class SshtApiUrl
   /**
    * Create DiagnosticReport Radiologi.
    *
-   * Method: POST 
+   * Method: POST
    * URL: api/v1/ssht/diagnostic-report/radio/create
    * Body JSON:
    * {
@@ -361,9 +361,37 @@ class SshtApiUrl
   public const DIAGNOSTIC_REPORT_UPDATE = "";
 
   // Procedure
-  public const PROCEDURE_GET = "";
-  public const PROCEDURE_GET_BY_ENCOUNTER = "";
-  public const PROCEDURE_CREATE = "";
+  /**
+   * Get Procedure
+   *
+   * Method: GET
+   * URL: api/v1/ssht/procedure/get
+   * Query Params:
+   * - id (required) : UUID4 - Format (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')
+   */
+  public const PROCEDURE_GET = ['POST', 'ssht/procedure/get'];
+
+  public const PROCEDURE_GET_BY_ENCOUNTER = ['POST', 'ssht/procedure/get-en'];
+
+
+  /**
+   * Create Procedure General.
+   *
+   * Method: POST
+   * URL: api/v1/ssht/procedure/general/create
+   * Body JSON:
+   * {
+   *  "encounterIdIHS" => "required|uuid",
+   *  "proc_code" => "required|string", // if general proc icd-9 code elif diagnostik
+   *  "proc_display" => "required|string", // if general proc icd-9 display
+   *  "status" => "required|string", // completed, entered-in-error, not-done, in-progres
+   *  "category" => "required|string", // general, edukasi dkk,
+   *  "dok" => "string", // nik dokter
+   *  "rm" => "string", // rm local
+   *  "datetime" => "datetime" // bisa pake inprogress_start
+   * }
+   */
+  public const PROCEDURE_CREATE = ['POST', 'ssht/procedure/general/create'];
   public const PROCEDURE_UPDATE = "";
   public const PROCEDURE_UPDATE_RMNDOK = "";
 
@@ -375,7 +403,7 @@ class SshtApiUrl
   // Imunization
   /**
    * Get Imunization by imunization_idIHS.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/imunization/get
    * Query Params:
@@ -385,7 +413,7 @@ class SshtApiUrl
 
   /**
    * Create Immunization.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/immunization/create
    * Body JSON:
@@ -424,10 +452,10 @@ class SshtApiUrl
 
   /**
    * Update[PATCH] Immunization.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/immunization/patch
-   * 
+   *
    * Body JSON:
    * {
    *    "id": "string (required|uuid) - ID imunisasi"
@@ -441,19 +469,19 @@ class SshtApiUrl
 
   // MEDICATION_DISPENSE
 
-  // MISC 
+  // MISC
   public const CONSENT_CREATE = "ssht/misc/consent/create";
   public const CONSENT_CEK = "ssht/misc/consent";
 
   // MISC - KYC
-  public const KYC_GENERATE = "ssht/misc/kyc";
-  public const KYC_STATUS = "ssht/misc/kyc/cek";
+  public const KYC_GENERATE = ["POST", "ssht/misc/kyc"];
+  public const KYC_STATUS = ["POST", "ssht/misc/kyc/cek"];
 
   // MISC - KFA
 
   /**
    * Get kfa data product by keyword.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/misc/kfa/product/all
    * Body JSON:
@@ -469,7 +497,7 @@ class SshtApiUrl
 
   /**
    * Get kfa data detail product.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/misc/kfa/product/detail
    * Body JSON:
@@ -486,7 +514,7 @@ class SshtApiUrl
   // MISC - DASHBOARD LOG
   /**
    * Get summary data for dashboard view.
-   * 
+   *
    * Method: GET
    * URL: api/v1/ssht/misc/dashboard-look/index
    * Query Params:
@@ -494,9 +522,10 @@ class SshtApiUrl
    * - date_range (optional) : string - Format (YYYY-MM-DD to YYYY-MM-DD)
    */
   public const DASHBOARD_LOOK_INDEX = ['GET', 'api/v1/ssht/misc/dashboard-look/index'];
+
   /**
    * Get detailed data for a specific dashboard item.
-   * 
+   *
    * Method: POST
    * URL: api/v1/ssht/misc/dashboard-look/view
    * Body JSON:
