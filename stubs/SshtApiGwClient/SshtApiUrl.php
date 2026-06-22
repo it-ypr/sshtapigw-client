@@ -424,7 +424,7 @@ class SshtApiUrl
    *    "location_idIHS": "string (sometimes|uuid) - ID IHS lokasi",
    *    "location_nama": "string (sometimes|max:255) - nama lokasi",
    *    "encounter_idIHS": "string (required|uuid) - ID IHS encounter",
-   *    "vacine_data": [
+   *    "vacine_data": (required|array) [
    *       {
    *          "code": "string (required|max:60) - kode vaksin kfa",
    *          "display": "string (required|max:255) - nama vaksin kfa",
@@ -487,6 +487,16 @@ class SshtApiUrl
    *    "local_id": "string (required|max:60) - ID lokal obat/resep",
    *    "kfa_code": "string (required|max:30) - kode KFA obat",
    *    "kfa_display": "string (required) - nama obat berdasarkan KFA",
+   *    "kfa_bza": (required|array) [
+   *        {
+   *          "state": "string (required) - exp: valid",
+   *          "active": "boolean (required) - exp: true,
+   *          "kfa_code": "string (required|string|numeric|max:30) - kode kfa 91xxxxxx",
+   *          "zat_aktif": "string (required|string) - kfa_display (Paracetamol)",
+   *          "updated_at": "date (required) - exp: 2022-11-29 09:36:56",
+   *          "kekuatan_zat_aktif": "string (required|max:50) - kekuatan zat aktif (500 mg)"
+   *        }
+   *    ],
    *    "kfa_form": {
    *       "code": "string (required|max:10) - kode bentuk sediaan obat",
    *       "name": "string (required|max:40) - nama bentuk sediaan obat"
@@ -516,6 +526,67 @@ class SshtApiUrl
   public const MEDICATION_REQUEST_GET = ["GET", "ssht/misc/consent"];
 
   // MEDICATION_DISPENSE
+  /**
+   * Create MedicationDispense.
+   *
+   * Method: POST
+   * URL: api/v1/ssht/medication-dispense/create
+   *
+   * Body JSON:
+   * {
+   *    "medicationRequest_idIHS": "string (required|uuid) - ID IHS medication request",
+   *    "encounter_idIHS": "string (required|uuid) - ID IHS encounter",
+   *    "patient_idIHS": "string (required|max:50) - ID IHS pasien",
+   *    "patient_nama": "string (required|max:60) - nama pasien",
+   *    "rm": "string (required|max:10) - nomor rekam medis pasien",
+   *    "dok": "string (required|max:10) - kode dokter",
+   *    "performer_idIHS": "string (required|max:50) - ID IHS petugas farmasi",
+   *    "performer_nama": "string (required|max:60) - nama petugas farmasi",
+   *    "inprogress_end": "string (required|date) - tanggal selesai pengobatan (format: YYYY-MM-DD HH:mm:ss)",
+   *    "identifier_resep": "string (required|max:60) - nomor identifier resep",
+   *    "identifier_resep_index": "string (required|max:64) - identifier index resep",
+   *    "local_id": "string (required|max:60) - ID lokal obat/resep",
+   *    "kfa_code": "string (required|max:30) - kode KFA obat",
+   *    "kfa_display": "string (required) - nama obat berdasarkan KFA",
+   *    "kfa_bza": (required|array) [
+   *        {
+   *          "state": "string (required) - exp: valid",
+   *          "active": "boolean (required) - exp: true,
+   *          "kfa_code": "string (required|string|numeric|max:30) - kode kfa 91xxxxxx",
+   *          "zat_aktif": "string (required|string) - kfa_display (Paracetamol)",
+   *          "updated_at": "date (required) - exp: 2022-11-29 09:36:56",
+   *          "kekuatan_zat_aktif": "string (required|max:50) - kekuatan zat aktif (500 mg)"
+   *        }
+   *    ],
+   *    "kfa_form": {
+   *       "code": "string (required|max:10) - kode bentuk sediaan obat",
+   *       "name": "string (required|max:40) - nama bentuk sediaan obat"
+   *    },
+   *    "kfa_route": {
+   *       "code": "string (required|max:10) - kode rute pemberian obat",
+   *       "name": "string (required|max:40) - nama rute pemberian obat"
+   *    },
+   *    "jumlah": "string (required|numeric) - jumlah obat yang diberikan",
+   *    "kali": "string (required|numeric) - frekuensi penggunaan obat per hari",
+   *    "hari": "string (required|numeric) - durasi penggunaan obat dalam hari"
+   *    "location_idIHS": "string (required|uuid) - ID IHS location farmasi",
+   *    "location_name": "string (required|max:64) - nama location farmasi"
+   * }
+   */
+  public const MEDICATION_DISPENSE_CREATE = ["POST", "ssht/medication-dispense/create"];
+
+  /**
+   * Get MedicationDispense.
+   *
+   * Method: GET
+   * URL: api/v1/ssht/medication-dispense/get
+   *
+   * Query Params:
+   * {
+   *   id (required) : UUID4 - Format (Example: d99eb2ec-889e-80d6-9976-4e0113c5401b)
+   * }
+   */
+  public const MEDICATION_DISPENSE_GET = ["GET", "ssht/medication-dispense/get"];
 
   // MISC
   public const CONSENT_CREATE = "ssht/misc/consent/create";
