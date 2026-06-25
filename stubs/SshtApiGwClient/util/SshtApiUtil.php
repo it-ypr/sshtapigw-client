@@ -2,6 +2,7 @@
 
 namespace common\services\SshtApiGwClient\util;
 
+use Carbon\Carbon;
 use Jstewmc\Rtf\Document;
 use Yii;
 
@@ -104,5 +105,26 @@ class SshtApiUtil
     // // }
 
     return $result;
+  }
+
+  public static function genIdentifierResepMedication($tgl_param, $resep_param, $index = 1): object
+  {
+    if ($index == 0) {
+      $codedate = Carbon::parse($tgl_param)->format('Ymd');
+      $idnresep = (string)$codedate . '-' . (string) $resep_param;
+
+      return (object) [
+        "identifier_resep" => $idnresep,
+        "identifier_resep_index" => $idnresep . "-" . "1"
+      ];
+    }
+
+    $codedate = (string) Carbon::parse($tgl_param)->format('Ymd');
+    $idnresep = $codedate . '-' . (string) $resep_param;
+
+    return (object) [
+      "identifier_resep" => $idnresep,
+      "identifier_resep_index" => $idnresep . "-" . (string) $index
+    ];
   }
 }

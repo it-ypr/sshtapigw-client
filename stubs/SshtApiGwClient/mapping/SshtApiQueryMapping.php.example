@@ -353,5 +353,151 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return $data;
   }
+
+  public static function queryLabRalan(string $tanggal, string $rm)
+  {
+    $db1 = Yii::$app->db;
+
+    // select lnb.tanggal, lnb.rm, 
+    // lis_hasil.*,
+    // lab_transaksi.notest,
+    // lab_transaksi.kode_trn, 
+    // harga_laborat.nama, 
+    // lab_transaksi.jenis_trn 
+    // from ( 
+    //   select lab_newbiodata.*
+    //   from lab_newbiodata
+    //   where lab_newbiodata.rm = '320904' and lab_newbiodata.tanggal = '2025-09-29'
+    // ) as lnb
+    // left join lis_hasil on lnb.NoTest = lis_hasil.SAMPEL_ID
+    // left join lab_product on lis_hasil.TEST_ID = lab_product.id_lab
+    // left join lab_transaksi on lnb.NoTest = lab_transaksi.notest
+    // left join harga_laborat on lab_transaksi.kode_trn = harga_laborat.test_id;
+
+    $sub = (new Query())
+      ->select('*')
+      ->from('lab_newbiodata')
+      ->where([
+        'rm' => '320904',
+        'tanggal' => '2025-09-29',
+      ]);
+
+    $query = (new Query())
+      ->select([
+        'lnb.tanggal',
+        'lnb.rm',
+        'lis_hasil.*',
+        'lab_transaksi.notest',
+        'lab_transaksi.kode_trn',
+        'harga_laborat.nama',
+        'lab_transaksi.jenis_trn',
+      ])
+      ->from(['lnb' => $sub])
+      ->leftJoin('lis_hasil', 'lnb.NoTest = lis_hasil.SAMPEL_ID')
+      ->leftJoin('lab_product', 'lis_hasil.TEST_ID = lab_product.id_lab')
+      ->leftJoin('lab_transaksi', 'lnb.NoTest = lab_transaksi.notest')
+      ->leftJoin('harga_laborat', 'lab_transaksi.kode_trn = harga_laborat.test_id');
+
+    $data = $query->all($db1);
+
+    if (!$data) {
+      return false;
+    }
+
+    return $data;
+  }
+
+  public static function queryMedicationRalan(string $tgl_param, string $rm_param)
+  {
+    $db1 = Yii::$app->db;
+
+    $sub = (new Query())
+      ->select([
+        'fb.Id',
+        'fb.tanggal',
+        'fb.resep',
+        'fb.nama',
+        'fb.rm',
+        'fb.kddokter',
+        'fb.petugas',
+        'fb.id_ambil',
+      ])
+      ->from(['fb' => 'frm_biodata'])
+      ->where([
+        'fb.tanggal' => $tgl_param
+      ]);
+
+    $query = (new Query())
+      ->select([
+        'fr.Id',
+        'fbio.resep',
+        'fbio.rm',
+        'fbio.tanggal',
+        'fbio.kddokter',
+        'fr.resep as fr_resep',
+        'rob.id_local',
+        'lg.kode_brg',
+        'lg.nama',
+        'rob.kfa_code',
+        'rob.kfa_display',
+        'fr.jumlah',
+        'fr.kali',
+        'fr.hari',
+        'rob.kfa_bza',
+        'rob.kfa_ucum',
+        'rob.kfa_uom',
+        'rob.kfa_route',
+        'rob.kfa_form',
+        'md.idssht as ihs_dok',
+        'mp.idssht as ihs_petugas',
+        'mp.nm_user as petugas_nama',
+        'ma.idssht as ihs_petugas_ambil',
+        'ma.nm_user as petugas_ambil_nama'
+      ])
+      ->from(['fbio' => $sub])
+      ->leftJoin('frm_ralan as fr', 'fbio.resep = fr.resep and fbio.tanggal = fr.tanggal')
+      ->leftJoin('log_gudang as lg', 'fr.kode_brg = lg.kode_brg')
+      ->leftJoin('ref_obat_briging as rob', 'lg.Id = rob.id_local')
+      ->leftJoin('muser as md', 'fbio.kddokter = md.nik')
+      ->leftJoin('muser as mp', 'fbio.petugas = mp.nik')
+      ->leftJoin('muser as ma', 'fbio.id_ambil = ma.nik')
+      ->where(['fbio.rm' => $rm_param]);
+
+    $data = $query->all($db1);
+
+    if (!$data) {
+      return false;
+    }
+
+    return $data;
+  }
+
+
+  public static function getRefObatByLocalId(string $localid)
+  {
+    $db1 = Yii::$app->db;
+
+    $result = (new Query())
+      ->select([
+        'rob.Id',
+        'rob.id_local',
+        'rob.kfa_code',
+        'rob.kfa_display',
+        'rob.kfa_bza',
+        'rob.kfa_form',
+        'rob.kfa_route'
+      ])
+      ->from(['rob' => 'ref_obat_briging'])
+      ->where([
+        'rob.id_local' => $localid,
+      ])
+      ->one($db1);
+
+    if (!$result) {
+      return false;
+    }
+
+    return $result;
+  }
 }
 
