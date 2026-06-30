@@ -75,7 +75,12 @@ return [
     'orthanc_url' => 'http://your-orthanc-url:8042',
     'orthanc_auth_user' => 'ORTHANC_AUTH_USER',
     'orthanc_auth_password' => 'ORTHANC_AUTH_PASSWORD',
-    'dicom_router_name' => 'dicom-router'
+    'dicom_router_name' => 'dicom-router',
+    'medication_cron_limit' => 100, // for cron task limit to handle for each run..
+    'location_medication_ralan_ihs' => '', // uuid
+    'location_medication_ralan_display' => '', // display
+    'location_medication_ranap_ihs' => '',
+    'location_medication_ranap_display' => ''
   ],
   // ...
 ];
@@ -216,3 +221,9 @@ php yii ssht-api-client/test-hello
 ## Source:
 
 - [Guzzle-Response](https://docs.guzzlephp.org/en/stable/quickstart.html#using-responses) 
+
+
+## Roadmap:
+
+[Here](./Roadmap.md)
+
