@@ -1927,8 +1927,8 @@ class SshtApiClientController extends Controller
           "kali" => (string) $kali,
           "hari" => (string) $period,
           // location hardcode untuk test
-          "location_idIHS" => 'ed6e8271-9034-42ae-b35e-382b6db0ab88',
-          "location_nama" => 'Farmasi Rawat Jalan',
+          "location_idIHS" => $config['location_medication_ralan_ihs'],
+          "location_nama" => $config['location_medication_ralan_display'],
         ];
 
         // echo "\n";
@@ -3232,8 +3232,8 @@ class SshtApiClientController extends Controller
           'performer_idIHS' => $record['petugas_idIHS'],
           'performer_nama'  => $record['petugas_nama'],
 
-          "location_idIHS" => 'ed6e8271-9034-42ae-b35e-382b6db0ab88',
-          "location_nama" => 'Farmasi Rawat Jalan',
+          "location_idIHS" => $config['location_medication_ralan_ihs'],
+          "location_nama" => $config['location_medication_ralan_display'],
         ]);
 
         // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
