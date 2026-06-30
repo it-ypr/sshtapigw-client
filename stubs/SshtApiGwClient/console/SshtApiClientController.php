@@ -1554,6 +1554,99 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * php yii ssht-api-client/sync-refobatbriging-medication-single
+   */
+  public function actionSyncRefobatbrigingMedicationSingle($local_id)
+  {
+    // $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    // $debugger = new SshtApiDebugger(
+    //   enabled: $config['debug']
+    // );
+
+    try {
+
+      $getLocalObt = SshtApiQueryMapping::getRefObatByLocalId($local_id);
+
+      if (!$getLocalObt) {
+        $this->stdout("[-] tydac ada local_id tsb..\n");
+        return;
+        // continue;
+      }
+
+      if ($getLocalObt["medication_idIHS"]) {
+        $this->stdout("[-] sudah dimaping..\n");
+        return;
+      }
+
+      $payloadMedication = [
+        "local_id" => (string) $getLocalObt['id_local'],
+        "kfa_code" => $getLocalObt['kfa_code'],
+        "kfa_display" => $getLocalObt['kfa_display'],
+        "kfa_bza" => json_decode($getLocalObt['kfa_bza'], true),
+        "kfa_form" => json_decode($getLocalObt['kfa_form'], true),
+        "kfa_route" => json_decode($getLocalObt['kfa_route'], true),
+      ];
+
+      // if (!$debugger->allow(
+      //   context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+      //   payload: $payloadMedication,
+      // )) {
+      //   continue;
+      // }
+
+      // $this->stdout("[-] test..\n");
+      // exit;
+
+      $response = SshtApiBase::request(
+        SshtApiUrl::MEDICATION_CREATE,
+        [
+          'json' => $payloadMedication
+        ]
+      );
+
+      $resReq = json_decode((string) $response->getBody(), true);
+
+      if ($response->getStatusCode() == 400 && $resReq['errors']['code'] == 'duplicate') {
+        return;
+      }
+
+      // print_r($resProcReq->getBody());
+      $this->stdout("[+] body-response: \n");
+      print_r($resReq);
+
+      $medication_idIHS = $resReq['data']['medication_idIHS'] ?? null;
+      sleep(1);
+
+      if ($medication_idIHS) {
+        // $MedReqData = $resReq['data'];
+        // simpan medication_idIHS
+        Yii::$app->db->createCommand()->update(
+          'ref_obat_briging',
+          [
+            'medication_idIHS' => $medication_idIHS,
+            'updated_at' => date('Y-m-d H:i:s'),
+          ],
+          [
+            'id_local' => $local_id,
+            'kfa_code' => $getLocalObt['kfa_code'],
+          ]
+        )->execute();
+
+        $this->stdout("[+] Sukses sync\n");
+        $this->stdout("[+] medication_idIHS: {$medication_idIHS} \n");
+        $this->stdout("[+] local_id: {$local_id} \n");
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      // sleep(3);
+    }
+  }
+
+  /**
    * php yii ssht-api-client/test-wrapper-send-medication-ralan-single 2026-05-01 $rm
    */
   public function actionTestWrapperSendMedicationRalanSingle(string $tgl_param, string $rm_param): void
@@ -1561,7 +1654,6 @@ class SshtApiClientController extends Controller
     $this->actionTestSendMedicationRequestRalanSingle($tgl_param, $rm_param);
     // $this->actionTestSendMedicationDispenseRalanSingle($tgl_param, $rm_param);
   }
-
 
   /**
    * php yii ssht-api-client/test-send-medication-request-ralan-single 2026-05-01 $rm
@@ -1941,5 +2033,1142 @@ class SshtApiClientController extends Controller
       sleep(3);
     }
     // end function 
+  }
+
+  /**
+   * php yii ssht-api-client/test-send-medication-administration-ralan-single 2026-05-01 $rm
+   */
+  public function actionTestSendMedicationAdministrationRalanSingle(string $tgl_param, string $rm)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $medicationPatient = (new Query())
+        ->select([
+          'smr.medicationrequest_idIHS',
+          'se.idIHS as encounter_idIHS',
+          'se.subject_rm',
+          'se.subject_idIHS',
+          'se.subject_nama',
+          'smr.requester_idIHS',
+          'se.practition_lokalid',
+          'se.practition_nama',
+          'smr.petugas_idIHS',
+          'smr.petugas_nama',
+          'smr.petugas_ambil_idIHS',
+          'smr.petugas_ambil_nama',
+          'se.inprogress_end',
+          'smr.contained',
+          'smr.dosage_instruction',
+          'smr.quantity_value',
+          'smr.identifier_noresep',
+          'smr.identifier_noresep_index',
+          'smr.lokal_id',
+          'smd.medicationdispense_idIHS'
+        ])
+        ->from('ssht_medication_request smr')
+        ->leftJoin('ssht_encounter se', 'smr.encounter_idIHS = se.idIHS')
+        ->leftJoin('ssht_medication_dispense smd', 'smr.medicationrequest_idIHS = smd.medicationdispense_idIHS')
+        ->where(['CAST(authored_on AS DATE)' => $tgl_param])
+        ->all($dbLocal);
+
+      if (!$medicationPatient) {
+        $this->stdout("[-] Info: $rm pada tanggal $tgl_param tydac ada data MedicationRequest & MedicationDispense\n");
+        return;
+      }
+
+      print_r($medicationPatient);
+
+      foreach ($medicationPatient as $key => $obt) {
+
+        $localid = $obt['lokal_id'];
+
+        $getRefObtKfa = SshtApiQueryMapping::getRefObatByLocalId($localid);
+
+        $dosageinstruc = json_decode($obt['dosage_instruction'], true);
+
+        $kali = $dosageinstruc[0]['timing']['repeat']['frequency'];
+        $period = $dosageinstruc[0]['timing']['repeat']['period'];
+        $periodUnit = $dosageinstruc[0]['timing']['repeat']['periodUnit'];
+
+        if (!$getRefObtKfa) {
+          continue;
+        }
+
+        $payloadMedication = [
+          "medication_idIHS" => $getRefObtKfa['medication_idIHS'],
+          "medicationRequest_idIHS" => $obt['medicationrequest_idIHS'],
+          "encounter_idIHS" => $obt['encounter_idIHS'],
+          "patient_idIHS" => $obt['subject_idIHS'],
+          "patient_nama" => $obt['subject_nama'],
+          "rm" => $obt['subject_rm'],
+          "dok" => $obt['practition_lokalid'],
+          "performer_idIHS" => $obt['petugas_idIHS'],
+          "performer_nama" => $obt['petugas_nama'],
+          "inprogress_end" => $obt['inprogress_end'],
+          "identifier_resep" => $obt['identifier_noresep'],
+          "identifier_resep_index" => $obt['identifier_noresep_index'],
+          // mapping dari ref
+          "local_id" => (string) $localid,
+          "kfa_code" => $getRefObtKfa['kfa_code'],
+          "kfa_display" => $getRefObtKfa['kfa_display'],
+          "kfa_bza" => json_decode($getRefObtKfa['kfa_bza'], true),
+          "kfa_form" => json_decode($getRefObtKfa['kfa_form'], true),
+          "kfa_route" => json_decode($getRefObtKfa['kfa_route'], true),
+        ];
+
+        // echo "\n";
+        // print_r(json_encode($payloadMedication));
+        // exit;
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_ADMINISTRATION_CREATE),
+          payload: $payloadMedication,
+        )) {
+          continue;
+        }
+
+        $response = SshtApiBase::request(
+          SshtApiUrl::MEDICATION_ADMINISTRATION_CREATE,
+          [
+            'json' => $payloadMedication
+          ]
+        );
+
+        $resMedReq = json_decode((string) $response->getBody(), true);
+
+        // print_r($resProcReq->getBody());
+        $this->stdout("[+] body-response: \n");
+        print_r($resMedReq);
+
+        if ($response->getStatusCode() == 400 && $resMedReq['errors']['code'] == 'duplicate') {
+          continue;
+        }
+
+        $medicationAdministration_idIHS = $resMedReq['data']['medicationDispense_idIHS'] ?? null;
+        sleep(1);
+
+        if ($medicationAdministration_idIHS) {
+          $MedReqData = $resMedReq['data'];
+
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_administration', [
+            'medicationadministration_idIHS' => $medicationAdministration_idIHS, // uuid
+            // 'medicationdispense_idIHS' => $obt['medicationdispense_idIHS'], // uuid
+            'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'], // uuid
+
+            'medication_idIHS' => $MedReqData['medication_idIHS'], // uuid
+
+            'encounter_idIHS' => $MedReqData['encounter_idIHS'], // uuid
+
+            'rm'              => $MedReqData['rm'], // string:7
+            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+
+            // untuk membantu local map
+            'dok'             => $MedReqData['dok'], // string:14
+
+            // iki bagian MedicationRequest.dispenseRequest:
+            'performer_idIHS' => $MedReqData['performer_idIHS'], // string:30
+
+            // end bagian MedicationRequest.dispenseRequest:
+            // 'dosage_instruction' => $MedReqData['dosage_instruction'] ?? "", // text -> nullable true,
+
+            "reasonCode" => $MedReqData["reasonCode"],
+
+            'status'          => $MedReqData['status'], // string:30
+
+            // untuk mempermudah mapping lokal (trace)
+            'petugas_idIHS' => $MedReqData['performer_idIHS'], // string:30
+            'petugas_nama' => $obt['petugas_nama'], // string:30
+            'petugas_ambil_idIHS' => $obt['petugas_ambil_idIHS'], // string:30
+            'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
+
+            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+          ])->execute();
+
+          echo "   > medicationAdministration OK: " . ($medicationAdministration_idIHS ?? 'FAILED') . "\n";
+          // print_r($MedReqData);-> array to string kamprett
+          print_r($resMedReq);
+          // end if $medicationAdministration_idIHS
+        } else {
+          echo " FAILED medicationAdministration";
+          sleep(2);
+        }
+        sleep(3);
+        // endforeach   $medicationPatient
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(3);
+    }
+  }
+
+  /**
+   * php yii ssht-api-client/send-medication-request-ralan 2026-05-01
+   */
+  public function actionSendMedicationRequestRalan(string $tgl_param)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $encounter = (new Query())
+        ->select([
+          'idIHS',
+          'subject_rm',
+          'subject_idIHS',
+          'subject_nama',
+          'practition_idIHS',
+          'practition_nama',
+          'practition_lokalid',
+          'inprogress_start',
+          'inprogress_end',
+          'class'
+        ])
+        ->from('ssht_encounter')
+        ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        ->andWhere(['class' => 'AMB'])
+        ->all($dbLocal);
+
+      if (empty($encounter)) {
+        $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+        return;
+      }
+
+      print_r("Data array encounter:\n");
+      print_r($encounter[0]);
+      print_r($encounter[1]);
+      print_r("...\n");
+
+      foreach ($encounter as $key => $record) {
+
+        $rm = $record['subject_rm'];
+        $encounterIdIHS = $record['idIHS'];
+
+        $simrs = SshtApiQueryMapping::queryMedicationRalan(tgl_param: $tgl_param, rm_param: $rm);
+
+        if (!$simrs) {
+          $this->stdout("[-] SKIP: RM $rm tydac ada ProcedureGeneral\n");
+          return;
+          // continue;
+        }
+
+        print_r($simrs);
+
+        foreach ($simrs as $key => $obt) {
+
+          $identifier_resep = SshtApiUtil::genIdentifierResepMedication($tgl_param, $obt['resep'], $key);
+
+          $payloadMedication = [
+            "encounter_idIHS" => $encounterIdIHS,
+            "patient_idIHS" => $encounter['subject_idIHS'],
+            "patient_nama" => $encounter['subject_nama'],
+            "rm" => $encounter['subject_rm'],
+            "dok" => $encounter['practition_lokalid'],
+            "practition_idIHS" => $encounter['practition_idIHS'],
+            "practition_nama" => $encounter['practition_nama'],
+            "inprogress_end" => $encounter['inprogress_end'],
+            "identifier_resep" => $identifier_resep->identifier_resep,
+            "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+            "local_id" => (string) $obt['id_local'],
+            "kfa_code" => $obt['kfa_code'],
+            "kfa_display" => $obt['kfa_display'],
+            "kfa_bza" => json_decode($obt['kfa_bza'], true),
+            "kfa_form" => json_decode($obt['kfa_form'], true),
+            "kfa_route" => json_decode($obt['kfa_route'], true),
+            "jumlah" => (string) trim($obt['jumlah']),
+            "kali" => (string) trim($obt['kali']),
+            "hari" => (string) trim($obt['hari'])
+          ];
+
+          //
+          // print_r(json_encode($payloadMedication));
+          // exit;
+
+
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+            payload: $payloadMedication,
+          )) {
+            continue;
+          }
+
+          $response = SshtApiBase::request(
+            SshtApiUrl::MEDICATION_REQUEST_CREATE,
+            [
+              'json' => $payloadMedication
+            ]
+          );
+
+          $resMedReq = json_decode((string) $response->getBody(), true);
+
+          // print_r($resProcReq->getBody());
+          $this->stdout("[+] body-response: \n");
+          print_r($resMedReq);
+
+          if ($response->getStatusCode() == 400 && $resMedReq['errors']['code'] == 'duplicate') {
+            continue;
+          }
+
+          $medicationRequest_idIHS = $resMedReq['data']['medicationRequest_idIHS'] ?? null;
+          sleep(1);
+
+          if ($medicationRequest_idIHS) {
+            $MedReqData = $resMedReq['data'];
+
+            \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+              'medicationrequest_idIHS' => $medicationRequest_idIHS, // uuid
+              'encounter_idIHS' => $encounterIdIHS, // uuid
+
+              'identifier_noresep' => $MedReqData["identifier_noresep"],
+              'identifier_noresep_index' => $MedReqData['identifier_noresep_index'],
+
+              'contained' => $MedReqData['contained'], // text
+
+              'category_code'   => $MedReqData['category_code'], // string:20
+              'category_display' => $MedReqData['category_display'], // string:30
+              'category_system' => $MedReqData['category_system'], // string:191
+
+              'rm'              => $MedReqData['rm'], // string:7
+              'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+              'dok'             => $MedReqData['dok'], // string:14
+              'requester_idIHS' => $MedReqData['requester_idIHS'], // string:30
+              // iki bagian MedicationRequest.dispenseRequest:
+              'dispense_interval' => $MedReqData['dispense_interval'], // text
+              'expected_supply_duration' => $MedReqData['expected_supply_duration'], // text
+              'number_repeat_allowed' => $MedReqData['number_repeat_allowed'], // text
+
+              'performer_org_idIHS' => $MedReqData['performer_org_idIHS'], // string:30 - organisasi farmasi ralan
+
+              'quantity_system' => $MedReqData['quantity_system'], // string:191
+              'quantity_code' => $MedReqData['quantity_code'], // string:30
+              'quantity_unit' => $MedReqData['quantity_unit'], // string:30
+              'quantity_value' => $MedReqData['quantity_value'], // string:20
+              'authored_on'   => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
+              'validity_period_start' => $MedReqData['validity_period_start'], // date (y-m-d H:i:s)
+              'validity_period_end' => $MedReqData['validity_period_end'], // date (y-m-d H:i:s)
+              // end bagian MedicationRequest.dispenseRequest:
+              'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
+              'status'          => $MedReqData['status'], // string:30
+              'local_id' => $MedReqData['local_id'],
+
+              // untuk mempermudah mapping lokal (trace)
+              'petugas_idIHS' => $simrs['ihs_petugas'], // string:30
+              'petugas_nama' => $simrs['petugas_nama'], // string:30
+              'petugas_ambil_idIHS' => $simrs['ihs_petugas_ambil'], // string:30
+              'petugas_ambil_nama' => $simrs['petugas_ambil_nama'], // string:30
+
+              // timestamp
+              'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
+              'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+            ])->execute();
+
+            echo "   > MedicationRequest OK: " . ($medicationRequest_idIHS ?? 'FAILED') . "\n";
+            print_r($MedReqData);
+          } else {
+            echo " FAILED MedicationRequest";
+            sleep(3);
+          }
+          sleep(2);
+          //end foreach $encounter record...
+        }
+        sleep(4);
+        // end for each obt 
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(3);
+    }
+    // end function actionTestQueryMedicationRequestRalanSingle
+  }
+
+
+  /**
+   * php yii ssht-api-client/send-medication-dispense-ralan 2026-05-01
+   */
+  public function actionSendMedicationDispenseRalan(string $tgl_param)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      // payload dari MedicationRequest yang sudah dikirim sebelumnya..
+      $medicationRequest = (new Query())
+        ->select([
+          'smr.medicationrequest_idIHS',
+          'se.idIHS as encounter_idIHS',
+          'se.subject_rm',
+          'se.subject_idIHS',
+          'se.subject_nama',
+          'smr.requester_idIHS',
+          'se.practition_lokalid',
+          'se.practition_nama',
+          'smr.petugas_idIHS',
+          'smr.petugas_nama',
+          'smr.petugas_ambil_idIHS',
+          'smr.petugas_ambil_nama',
+          'se.inprogress_end',
+          'smr.contained',
+          'smr.dosage_instruction',
+          'smr.quantity_value',
+          'smr.identifier_noresep',
+          'smr.identifier_noresep_index',
+          'smr.lokal_id'
+        ])
+        ->from('ssht_medication_request smr')
+        ->leftJoin('ssht_encounter se', 'smr.encounter_idIHS = se.idIHS')
+        ->where(['CAST(authored_on AS DATE)' => $tgl_param])
+        ->all($dbLocal);
+
+      if (!$medicationRequest) {
+        $this->stdout("[-] $tgl_param tydac ada MedicationRequest\n");
+        return;
+        // continue;
+      }
+
+      print_r($medicationRequest);
+
+      foreach ($medicationRequest as $key => $obt) {
+
+        $localid = $obt['lokal_id'];
+
+        $getRefObtKfa = SshtApiQueryMapping::getRefObatByLocalId($localid);
+
+        $dosageinstruc = json_decode($obt['dosage_instruction'], true);
+
+        $kali = $dosageinstruc[0]['timing']['repeat']['frequency'];
+        $period = $dosageinstruc[0]['timing']['repeat']['period'];
+        $periodUnit = $dosageinstruc[0]['timing']['repeat']['periodUnit'];
+
+        if (!$getRefObtKfa) {
+          continue;
+        }
+
+        $payloadMedication = [
+          "medicationRequest_idIHS" => $obt['medicationrequest_idIHS'],
+          "encounter_idIHS" => $obt['encounter_idIHS'],
+          "patient_idIHS" => $obt['subject_idIHS'],
+          "patient_nama" => $obt['subject_nama'],
+          "rm" => $obt['subject_rm'],
+          "dok" => $obt['practition_lokalid'],
+          "performer_idIHS" => $obt['petugas_idIHS'],
+          "performer_nama" => $obt['petugas_nama'],
+          "inprogress_end" => $obt['inprogress_end'],
+          "identifier_resep" => $obt['identifier_noresep'],
+          "identifier_resep_index" => $obt['identifier_noresep_index'],
+          // mapping dari ref
+          "local_id" => (string) $localid,
+          "kfa_code" => $getRefObtKfa['kfa_code'],
+          "kfa_display" => $getRefObtKfa['kfa_display'],
+          "kfa_bza" => json_decode($getRefObtKfa['kfa_bza'], true),
+          "kfa_form" => json_decode($getRefObtKfa['kfa_form'], true),
+          "kfa_route" => json_decode($getRefObtKfa['kfa_route'], true),
+          // mapping dari ref
+          "jumlah" => (string) $obt['quantity_value'],
+          "kali" => (string) $kali,
+          "hari" => (string) $period,
+          // location hardcode untuk test
+          "location_idIHS" => 'ed6e8271-9034-42ae-b35e-382b6db0ab88',
+          "location_nama" => 'Farmasi Rawat Jalan',
+        ];
+
+        // echo "\n";
+        // print_r(json_encode($payloadMedication));
+        // exit;
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
+          payload: $payloadMedication,
+        )) {
+          continue;
+        }
+
+        $response = SshtApiBase::request(
+          SshtApiUrl::MEDICATION_DISPENSE_CREATE,
+          [
+            'json' => $payloadMedication
+          ]
+        );
+
+        $resMedReq = json_decode((string) $response->getBody(), true);
+
+        // print_r($resProcReq->getBody());
+        $this->stdout("[+] body-response: \n");
+        print_r($resMedReq);
+
+        if ($response->getStatusCode() == 400 && $resMedReq['errors']['code'] == 'duplicate') {
+          continue;
+        }
+
+        $medicationDispense_idIHS = $resMedReq['data']['medicationDispense_idIHS'] ?? null;
+        sleep(1);
+
+        if ($medicationDispense_idIHS) {
+          $MedReqData = $resMedReq['data'];
+
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
+            'medicationdispense_idIHS' => $medicationDispense_idIHS, // uuid
+            'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'], // uuid
+            'encounter_idIHS' => $MedReqData['encounter_idIHS'], // uuid
+
+            'identifier_noresep' => $MedReqData['identifier_noresep'],
+            'identifier_noresep_index' => $MedReqData['identifier_noresep_index'],
+
+            'contained' => $MedReqData['contained'], // text
+
+            'category_code'   => $MedReqData['category_code'], // string:20
+            'category_display' => $MedReqData['category_display'], // string:30
+            'category_system' => $MedReqData['category_system'], // string:191
+
+            'rm'              => $MedReqData['rm'], // string:7
+            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+
+            // untuk membantu local map
+            'dok'             => $MedReqData['dok'], // string:14
+            'requester_idIHS' => $obt['requester_idIHS'], // string:30
+
+            // iki bagian MedicationRequest.dispenseRequest:
+            'dispense_interval' => $MedReqData['dispense_interval'] ?? "", // ini tidak ada di medicationDispense
+            'expected_supply_duration' => $MedReqData['expected_supply_duration'] ?? "", // harusnya days_supply 
+
+            'number_repeat_allowed' => $MedReqData['number_repeat_allowed'] ?? "", //  fix besok hanya ada di medicationRequest
+
+            'performer_idIHS' => $MedReqData['performer_idIHS'], // string:30
+
+            'quantity_system' => $MedReqData['quantity_system'], // string:191
+            'quantity_code' => $MedReqData['quantity_code'], // string:20
+            'quantity_unit' => $MedReqData['quantity_unit'], // string:30
+            'quantity_value' => $MedReqData['quantity_value'], // string:20
+
+            'when_prepared' => $MedReqData['when_prepared'], // date (y-m-d H:i:s) -> nullable true
+            'when_handed_over' => $MedReqData['when_handed_over'], // date (y-m-d H:i:s) -> nullable true
+
+            // end bagian MedicationRequest.dispenseRequest:
+            'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
+            'status'          => $MedReqData['status'], // string:30
+
+            // untuk mempermudah mapping lokal (trace)
+            'petugas_idIHS' => $MedReqData['performer_idIHS'], // string:30
+            'petugas_nama' => $obt['petugas_nama'], // string:30
+            'petugas_ambil_idIHS' => $obt['petugas_ambil_idIHS'], // string:30
+            'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
+
+            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+          ])->execute();
+
+          echo "   > MedicationDispense OK: " . ($medicationDispense_idIHS ?? 'FAILED') . "\n";
+          // print_r($MedReqData);-> array to string kamprett
+          print_r($resMedReq); // kudumen iki hm..
+        } else {
+          echo " FAILED MedicationDispense";
+          sleep(2);
+        }
+
+        sleep(3);
+        // end for each obt 
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(3);
+    }
+    // end function 
+  }
+
+
+  /**
+   * php yii ssht-api-client/generate-medication-request-ralan-single 2026-05-01 $rm
+   */
+  public function actionGenerateMedicationRequestRalanSingle(string $tgl_param, string $rm)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $encounter = (new Query())
+        ->select([
+          'idIHS',
+          'subject_rm',
+          'subject_idIHS',
+          'subject_nama',
+          'practition_idIHS',
+          'practition_nama',
+          'practition_lokalid',
+          'inprogress_start',
+          'inprogress_end',
+          'class'
+        ])
+        ->from('ssht_encounter')
+        ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        ->andWhere(['subject_rm' => $rm])
+        ->andWhere(['class' => 'AMB'])
+        ->all($dbLocal);
+
+      if (empty($encounter)) {
+        $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+        return;
+      }
+
+      print_r("Data array encounter:\n");
+      print_r($encounter[0]);
+      // print_r($encounter[1]);
+      // print_r("...\n");
+
+      foreach ($encounter as $key => $record) {
+
+        $rm = $record['subject_rm'];
+        $encounterIdIHS = $record['idIHS'];
+
+        $simrs = SshtApiQueryMapping::queryMedicationRalan(tgl_param: $tgl_param, rm_param: $rm);
+
+        if (!$simrs) {
+          $this->stdout("[-] SKIP: kunjungan encounter RM: $rm tidak ditemukan data resep obat..\n");
+          // return;
+          continue;
+        }
+
+        print_r($simrs);
+
+        foreach ($simrs as $key => $obt) {
+
+          $identifier_resep = [];
+
+          $identifier_resep = SshtApiUtil::genIdentifierResepMedication($tgl_param, $obt['resep'], $key);
+
+          print_r($identifier_resep);
+
+          $payloadMedication = [
+            "encounter_idIHS" => $encounterIdIHS,
+            "medication_idIHS" => $obt["medication_idIHS"],
+            "patient_idIHS" => $record['subject_idIHS'],
+            "patient_nama" => $record['subject_nama'],
+            "rm" => $record['subject_rm'],
+            "dok" => $record['practition_lokalid'],
+            "practition_idIHS" => $record['practition_idIHS'],
+            "practition_nama" => $record['practition_nama'],
+            "inprogress_end" => $record['inprogress_end'],
+            "identifier_resep" => $identifier_resep->identifier_resep,
+            "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+            "local_id" => (string) $obt['id_local'] ?? "",
+            "kfa_code" => $obt['kfa_code'] ?? "",
+            "kfa_display" => $obt['kfa_display'] ?? "",
+            "kfa_bza" => isset($obt['kfa_bza'])
+              ? json_decode($obt['kfa_bza'], true)
+              : "",
+            "kfa_form" => isset($obt['kfa_form'])
+              ? json_decode($obt['kfa_form'], true)
+              : "",
+            "kfa_route" => isset($obt['kfa_route'])
+              ? json_decode($obt['kfa_route'], true)
+              : "",
+            "jumlah" => (string) trim($obt['jumlah']),
+            "kali" => (string) trim($obt['kali']),
+            "hari" => (string) trim($obt['hari'])
+          ];
+
+          // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
+          $checkMedicationRequest = (new Query())
+            ->select([
+              'id',
+              'medicationrequest_idIHS',
+              'identifier_noresep',
+              'identifier_noresep_index',
+            ])
+            ->from('ssht_medication_request')
+            // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+            ->where(['identifier_noresep_index' => $payloadMedication['identifier_resep_index']])
+            ->one($dbLocal);
+
+          // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
+          if (!empty($checkMedicationRequest)) {
+            continue;
+          }
+
+          if (!$debugger->allow(
+            context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_resep_index']],
+            payload: $payloadMedication,
+          )) {
+            continue;
+          }
+
+          // simpan task record ke db 
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+            'medication_idIHS' => $obt['medication_idIHS'] ?? '', // uuid
+            'medicationrequest_idIHS' => '', // uuid
+            'encounter_idIHS' => $encounterIdIHS, // uuid
+
+            'identifier_noresep' => $payloadMedication["identifier_resep"],
+            'identifier_noresep_index' => $payloadMedication["identifier_resep_index"],
+
+            // 'contained' => '', // text
+
+            // 'category_code'   => '', // string:20
+            // 'category_display' => '', // string:30
+            // 'category_system' => '', // string:191
+
+            'rm'              => $payloadMedication['rm'], // string:7
+            'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
+            'dok'             => $payloadMedication['dok'], // string:14
+            'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
+            // iki bagian MedicationRequest.dispenseRequest:
+            // 'dispense_interval' => '', // text
+            // 'expected_supply_duration' => '', // text
+            // 'number_repeat_allowed' => '', // text
+            //
+            // 'performer_org_idIHS' => '', // string:30 - organisasi farmasi ralan
+            //
+            // 'quantity_system' => '', // string:191
+            // 'quantity_code' => '', // string:30
+            // 'quantity_unit' => '', // string:30
+            // 'quantity_value' => '', // string:20
+            // 'authored_on'   => '', // date (y-m-d H:i:s) -> nullable true
+            //
+            // 'validity_period_start' => '', // date (y-m-d H:i:s)
+            // 'validity_period_end' => '', // date (y-m-d H:i:s)
+            // end bagian MedicationRequest.dispenseRequest:
+            // 'dosage_instruction' => , // text -> nullable true,
+            // 'status'          => $MedReqData['status'], // string:30
+            'local_id' => $payloadMedication['local_id'] ?? "",
+
+            // untuk mempermudah mapping lokal (trace)
+            'petugas_idIHS' => $obt['ihs_petugas'], // string:30
+            'petugas_nama' => $obt['petugas_nama'], // string:30
+            'petugas_ambil_idIHS' => $obt['ihs_petugas_ambil'], // string:30
+            'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
+
+            // timestamp
+            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+
+            // addition send
+            // 'send_at' => '',
+            'send_status' => 'P',
+            'payload' => json_encode($payloadMedication),
+            // 'send_error_message' => 
+            // 'send_error_code' => 
+
+          ])->execute();
+
+          echo "   > MedicationRequest identifier generated: " . ($identifier_noresep_index ?? 'FAILED') . "\n";
+          print_r($payloadMedication);
+        }
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(1);
+    }
+    // end function actionGenerateMedicationRequestRalan
+  }
+  // end class console
+
+
+  /**
+   * php yii ssht-api-client/generate-medication-request-ralan 2026-05-01
+   */
+  public function actionGenerateMedicationRequestRalan(string $tgl_param)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $encounter = (new Query())
+        ->select([
+          'idIHS',
+          'subject_rm',
+          'subject_idIHS',
+          'subject_nama',
+          'practition_idIHS',
+          'practition_nama',
+          'practition_lokalid',
+          'inprogress_start',
+          'inprogress_end',
+          'class'
+        ])
+        ->from('ssht_encounter')
+        ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        ->andWhere(['class' => 'AMB'])
+        ->all($dbLocal);
+
+      if (empty($encounter)) {
+        $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+        return;
+      }
+
+      print_r("Data array encounter:\n");
+      print_r($encounter[0]);
+      print_r($encounter[1]);
+      print_r("...\n");
+
+      foreach ($encounter as $key => $record) {
+
+        $rm = $record['subject_rm'];
+        $encounterIdIHS = $record['idIHS'];
+
+        $simrs = SshtApiQueryMapping::queryMedicationRalan(tgl_param: $tgl_param, rm_param: $rm);
+
+        if (!$simrs) {
+          $this->stdout("[-] SKIP: kunjungan encounter RM: $rm tidak ditemukan data resep obat..\n");
+          // return;
+          continue;
+        }
+
+        print_r($simrs);
+
+        foreach ($simrs as $key => $obt) {
+
+          $identifier_resep = SshtApiUtil::genIdentifierResepMedication($tgl_param, $obt['resep'], $key);
+
+          $payloadMedication = [
+            "encounter_idIHS" => $encounterIdIHS,
+            "medication_idIHS" => (string) $obt['medication_idIHS'],
+            "patient_idIHS" => $record['subject_idIHS'],
+            "patient_nama" => $record['subject_nama'],
+            "rm" => $record['subject_rm'],
+            "dok" => $record['practition_lokalid'],
+            "practition_idIHS" => $record['practition_idIHS'],
+            "practition_nama" => $record['practition_nama'],
+            "inprogress_end" => $record['inprogress_end'],
+            "identifier_resep" => $identifier_resep->identifier_resep,
+            "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+            "local_id" => (string) $obt['id_local'],
+            "kfa_code" => $obt['kfa_code'],
+            "kfa_display" => $obt['kfa_display'],
+            "kfa_bza" => json_decode($obt['kfa_bza'], true),
+            "kfa_form" => json_decode($obt['kfa_form'], true),
+            "kfa_route" => json_decode($obt['kfa_route'], true),
+            "jumlah" => (string) trim($obt['jumlah']),
+            "kali" => (string) trim($obt['kali']),
+            "hari" => (string) trim($obt['hari'])
+          ];
+
+          // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
+          $checkMedicationRequest = (new Query())
+            ->select([
+              'id',
+              'medicationrequest_idIHS',
+              'identifier_noresep',
+              'identifier_noresep_index',
+            ])
+            ->from('ssht_medication_request')
+            // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+            ->where(['identifier_noresep_index' => $payloadMedication['identifier_resep_index']])
+            ->one($dbLocal);
+
+          // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
+          // if (
+          //   $checkMedicationRequest ||
+          //   $checkMedicationRequest['identifier_noresep_index'] == $payloadMedication['identifier_resep_index']
+          // ) {
+          if (!empty($checkMedicationRequest)) {
+            continue;
+          }
+
+          // simpan task record ke db 
+          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+            'medicationrequest_idIHS' => '', // uuid
+            'medication_idIHS' => $payloadMedication["medication_idIHS"] ?? "", // uuid
+            'encounter_idIHS' => $encounterIdIHS, // uuid
+
+            'identifier_noresep' => $payloadMedication["identifier_resep"],
+            'identifier_noresep_index' => $payloadMedication['identifier_resep_index'],
+
+            // 'contained' => '', // text
+
+            // 'category_code'   => '', // string:20
+            // 'category_display' => '', // string:30
+            // 'category_system' => '', // string:191
+
+            'rm'              => $payloadMedication['rm'], // string:7
+            'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
+            'dok'             => $payloadMedication['dok'], // string:14
+            'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
+            // iki bagian MedicationRequest.dispenseRequest:
+            // 'dispense_interval' => '', // text
+            // 'expected_supply_duration' => '', // text
+            // 'number_repeat_allowed' => '', // text
+            //
+            // 'performer_org_idIHS' => '', // string:30 - organisasi farmasi ralan
+            //
+            // 'quantity_system' => '', // string:191
+            // 'quantity_code' => '', // string:30
+            // 'quantity_unit' => '', // string:30
+            // 'quantity_value' => '', // string:20
+            // 'authored_on'   => '', // date (y-m-d H:i:s) -> nullable true
+            //
+            // 'validity_period_start' => '', // date (y-m-d H:i:s)
+            // 'validity_period_end' => '', // date (y-m-d H:i:s)
+            // end bagian MedicationRequest.dispenseRequest:
+            // 'dosage_instruction' => , // text -> nullable true,
+            // 'status'          => $MedReqData['status'], // string:30
+            'local_id' => $payloadMedication['local_id'],
+
+            // untuk mempermudah mapping lokal (trace)
+            'petugas_idIHS' => $simrs['ihs_petugas'], // string:30
+            'petugas_nama' => $simrs['petugas_nama'], // string:30
+            'petugas_ambil_idIHS' => $simrs['ihs_petugas_ambil'], // string:30
+            'petugas_ambil_nama' => $simrs['petugas_ambil_nama'], // string:30
+
+            // timestamp
+            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+
+            // addition send
+            // 'send_at' => '',
+            'send_status' => 'P',
+            'payload' => $payloadMedication,
+            // 'send_error_message' => 
+            // 'send_error_code' => 
+
+          ])->execute();
+
+          echo "   > MedicationRequest identifier generated: " . ($identifier_noresep_index ?? 'FAILED') . "\n";
+          print_r($payloadMedication);
+        }
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(1);
+    }
+    // end function actionGenerateMedicationRequestRalan
+  }
+  // end class console
+
+
+  /**
+   * php yii ssht-api-client/task-send-medication-request-ralan (--send_status=P)
+   * 15 * * * * cron medication ralan
+   */
+  public function actionTaskSendMedicationRequestRalan()
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    try {
+
+      $taskMedicationRequest = (new Query())
+        ->select([
+          "smr.id",
+          "smr.medication_idIHS",
+          "smr.encounter_idIHS",
+          "smr.payload",
+          "smr.send_status",
+          "smr.created_at",
+          "smr.updated_at",
+          "smr.send_at",
+        ])
+        ->from('ssht_medication_request smr')
+        ->where(['send_status' => 'P'])
+        ->limit($config['medication_cron_limit']) // di confing sementara set 100 dulu..
+        // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+        // ->andWhere(['class' => 'AMB'])
+        ->all($dbLocal);
+
+      if (empty($taskMedicationRequest)) {
+        $this->stdout("[!] Tydac ada data task medicationRequest \n");
+        return;
+      }
+
+      foreach ($taskMedicationRequest as $key => $record) {
+
+        // $rm = $record['rm'];
+        // $encounterIdIHS = $record['encounter_idIHS'];
+
+        $payload = json_decode($record['payload'], true);
+        // $tglToSend = $payload['inprogress_end'];
+
+        // CHECKING SUDAH TER SYNC MEDICATION blom..
+        $getLocalObt = SshtApiQueryMapping::getRefObatByLocalId($payload['local_id']);
+
+        if (!$getLocalObt) {
+          $this->stdout("[-] tydac ada local_id tsb..\n");
+
+          // NEED MAPPING kfa + sync medication
+          Yii::$app->db->createCommand()->update(
+            'ssht_medication_request',
+            [
+              'send_status' => 'M',
+              'send_error_code' => '',
+              'send_error_message' => 'Obat: ' . $payload['local_id'] . ' ,dengan identifier_noresep_index: ' . $payload["identifier_noresep_index"] . ' ,Perlu mapping Obat (KFA & sync Medication) untuk kirim MedicationRequest..',
+              'payload' => $payload
+            ],
+            [
+              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              'updated_at' => date('Y-m-d H:i:s'),
+            ]
+          )->execute();
+
+
+          $this->stdout("[-] {$payload['identifier_noresep_index']} dengan Obat: {$payload['local_id']} Perlu dimaping KFA dan Sync Medication.. \n");
+          // return;
+          continue;
+        }
+
+        // $medicationSync = $payload['local_id']
+
+        // SEND TASK to SSHT
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+          payload: $payload,
+        )) {
+          continue;
+        }
+
+        $response = SshtApiBase::request(
+          SshtApiUrl::MEDICATION_REQUEST_CREATE,
+          [
+            'json' => $payload
+          ]
+        );
+
+
+        $resMedReq = json_decode((string) $response->getBody(), true);
+
+        // print_r($resProcReq->getBody());
+        $this->stdout("[+] body-response: \n");
+        print_r($resMedReq);
+
+        if (
+          $response->getStatusCode() == 400 ||
+          $response->getStatusCode() == 422 ||
+          $response->getStatusCode() == 500 ||
+          isset($resMedReq['errors'])
+        ) {
+          // 1. logic find by identifier_noresep_index 
+          // 2. update send_status, send_status_code, send_status_message
+          Yii::$app->db->createCommand()->update(
+            'ssht_medication_request',
+            [
+              'send_status' => 'F',
+              'send_error_code' => $response->getStatusCode(),
+              'send_error_message' => $resMedReq['errors'],
+              'payload' => $payload
+            ],
+            [
+              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              'updated_at' => date('Y-m-d H:i:s'),
+            ]
+          )->execute();
+          continue;
+        }
+
+        $medicationRequest_idIHS = $resMedReq['data']['medicationRequest_idIHS'] ?? null;
+        sleep(1);
+
+        if ($medicationRequest_idIHS) {
+          $MedReqData = $resMedReq['data'];
+          // else sukses 
+          // 1. update record by indentifier_noresep_index
+          \Yii::$app->sshtAPIdb->createCommand()->update(
+            'ssht_medication_request',
+            [
+              'medicationrequest_idIHS' => $medicationRequest_idIHS, // uuid
+              // 'encounter_idIHS' => $encounterIdIHS, // uuid
+              // 'identifier_noresep' => $MedReqData["identifier_noresep"],
+              // 'identifier_noresep_index' => $MedReqData['identifier_noresep_index'],
+
+              'contained' => $MedReqData['contained'], // text
+
+              'category_code'   => $MedReqData['category_code'], // string:20
+              'category_display' => $MedReqData['category_display'], // string:30
+              'category_system' => $MedReqData['category_system'], // string:191
+
+              // 'rm'              => $MedReqData['rm'], // string:7
+              // 'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+              // 'dok'             => $MedReqData['dok'], // string:14
+              // 'requester_idIHS' => $MedReqData['requester_idIHS'], // string:30
+
+              // iki bagian MedicationRequest.dispenseRequest:
+              'dispense_interval' => $MedReqData['dispense_interval'], // text
+              'expected_supply_duration' => $MedReqData['expected_supply_duration'], // text
+              'number_repeat_allowed' => $MedReqData['number_repeat_allowed'], // text
+
+              'performer_org_idIHS' => $MedReqData['performer_org_idIHS'], // string:30 - organisasi farmasi ralan
+
+              'quantity_system' => $MedReqData['quantity_system'], // string:191
+              'quantity_code' => $MedReqData['quantity_code'], // string:30
+              'quantity_unit' => $MedReqData['quantity_unit'], // string:30
+              'quantity_value' => $MedReqData['quantity_value'], // string:20
+              'authored_on'   => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
+              'validity_period_start' => $MedReqData['validity_period_start'], // date (y-m-d H:i:s)
+              'validity_period_end' => $MedReqData['validity_period_end'], // date (y-m-d H:i:s)
+              // end bagian MedicationRequest.dispenseRequest:
+
+              'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
+              'status'          => $MedReqData['status'], // string:30
+              'local_id' => $MedReqData['local_id'],
+
+              // untuk mempermudah mapping lokal (trace)
+              // 'petugas_idIHS' => $simrs['ihs_petugas'], // string:30
+              // 'petugas_nama' => $simrs['petugas_nama'], // string:30
+              // 'petugas_ambil_idIHS' => $simrs['ihs_petugas_ambil'], // string:30
+              // 'petugas_ambil_nama' => $simrs['petugas_ambil_nama'], // string:30
+
+              // timestamp
+              'updated_at' => date('Y-m-d H:i:s'), // timestamp nullable true
+
+              // addition send
+              'send_at' => date('Y-m-d H:i:s'),
+              'send_status' => 'S',
+              'payload' => $payload,
+              'send_error_message' => '',
+              'send_error_code' => ''
+            ],
+            [
+              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              // 'updated_at' => date('Y-m-d H:i:s'),
+            ]
+          )->execute();
+
+          echo "   > MedicationRequest identifier generated: " . ($identifier_noresep_index ?? 'FAILED') . "\n";
+          // print_r($payload);
+        }
+      }
+    } catch (\Exception $e) {
+      echo " ERROR: " . $e->getMessage() . "\n";
+      echo "$e";
+      sleep(1);
+    }
+    // end function actionGenerateMedicationRequestRalan
   }
 }
