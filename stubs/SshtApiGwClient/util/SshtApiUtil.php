@@ -107,7 +107,7 @@ class SshtApiUtil
     return $result;
   }
 
-  public static function genIdentifierResepMedication($tgl_param, $resep_param, $index = 1): object
+  public static function genIdentifierResepMedication($tgl_param, $resep_param, $index): object
   {
     if ($index == 0) {
       $codedate = Carbon::parse($tgl_param)->format('Ymd');
@@ -124,7 +124,17 @@ class SshtApiUtil
 
     return (object) [
       "identifier_resep" => $idnresep,
-      "identifier_resep_index" => $idnresep . "-" . (string) $index
+      "identifier_resep_index" => $idnresep . "-" . (string) $index + 1
     ];
+  }
+
+  public static function genAturanPakaiObat(
+    string $kali = '', // 3 , 1-2 , 2
+    string $hari = '', // 1 , 10, OLES
+    string $sediaan = '', // tablet, ML , salep
+    string $waktu = '' // sesudah makan, Sesudah makan, 
+  ): string {
+    // 3 x 1 Tablet sesudah makan
+    return (string) $kali . ' X ' . ' ' . $hari . ' ' . $sediaan . ' ' . $waktu;
   }
 }
