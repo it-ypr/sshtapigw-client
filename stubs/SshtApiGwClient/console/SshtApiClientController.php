@@ -1722,8 +1722,8 @@ class SshtApiClientController extends Controller
           "practition_idIHS" => $encounter['practition_idIHS'],
           "practition_nama" => $encounter['practition_nama'],
           "inprogress_end" => $encounter['inprogress_end'],
-          "identifier_resep" => $identifier_resep->identifier_resep,
-          "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+          "identifier_noresep" => $identifier_resep->identifier_noresep,
+          "identifier_noresep_index" => $identifier_resep->identifier_noresep_index,
           "local_id" => (string) $obt['id_local'],
           "kfa_code" => $obt['kfa_code'],
           "kfa_display" => $obt['kfa_display'],
@@ -1913,8 +1913,8 @@ class SshtApiClientController extends Controller
           "performer_idIHS" => $obt['petugas_idIHS'],
           "performer_nama" => $obt['petugas_nama'],
           "inprogress_end" => $obt['inprogress_end'],
-          "identifier_resep" => $obt['identifier_noresep'],
-          "identifier_resep_index" => $obt['identifier_noresep_index'],
+          "identifier_noresep" => $obt['identifier_noresep'],
+          "identifier_noresep_index" => $obt['identifier_noresep_index'],
           // mapping dari ref
           "local_id" => (string) $localid,
           "kfa_code" => $getRefObtKfa['kfa_code'],
@@ -2113,8 +2113,8 @@ class SshtApiClientController extends Controller
           "performer_idIHS" => $obt['petugas_idIHS'],
           "performer_nama" => $obt['petugas_nama'],
           "inprogress_end" => $obt['inprogress_end'],
-          "identifier_resep" => $obt['identifier_noresep'],
-          "identifier_resep_index" => $obt['identifier_noresep_index'],
+          "identifier_noresep" => $obt['identifier_noresep'],
+          "identifier_noresep_index" => $obt['identifier_noresep_index'],
           // mapping dari ref
           "local_id" => (string) $localid,
           "kfa_code" => $getRefObtKfa['kfa_code'],
@@ -2282,8 +2282,8 @@ class SshtApiClientController extends Controller
             "practition_idIHS" => $encounter['practition_idIHS'],
             "practition_nama" => $encounter['practition_nama'],
             "inprogress_end" => $encounter['inprogress_end'],
-            "identifier_resep" => $identifier_resep->identifier_resep,
-            "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+            "identifier_noresep" => $identifier_resep->identifier_noresep,
+            "identifier_noresep_index" => $identifier_resep->identifier_noresep_index,
             "local_id" => (string) $obt['id_local'],
             "kfa_code" => $obt['kfa_code'],
             "kfa_display" => $obt['kfa_display'],
@@ -2475,8 +2475,8 @@ class SshtApiClientController extends Controller
           "performer_idIHS" => $obt['petugas_idIHS'],
           "performer_nama" => $obt['petugas_nama'],
           "inprogress_end" => $obt['inprogress_end'],
-          "identifier_resep" => $obt['identifier_noresep'],
-          "identifier_resep_index" => $obt['identifier_noresep_index'],
+          "identifier_noresep" => $obt['identifier_noresep'],
+          "identifier_noresep_index" => $obt['identifier_noresep_index'],
           // mapping dari ref
           "local_id" => (string) $localid,
           "kfa_code" => $getRefObtKfa['kfa_code'],
@@ -2489,8 +2489,8 @@ class SshtApiClientController extends Controller
           "kali" => (string) $kali,
           "hari" => (string) $period,
           // location hardcode untuk test
-          "location_idIHS" => 'ed6e8271-9034-42ae-b35e-382b6db0ab88',
-          "location_nama" => 'Farmasi Rawat Jalan',
+          "location_idIHS" => $config['location_medication_ralan_ihs'],
+          "location_nama" => $config['location_medication_ralan_display'],
         ];
 
         // echo "\n";
@@ -2682,8 +2682,8 @@ class SshtApiClientController extends Controller
             "practition_idIHS" => $record['practition_idIHS'],
             "practition_nama" => $record['practition_nama'],
             "inprogress_end" => $record['inprogress_end'],
-            "identifier_resep" => $identifier_resep->identifier_resep,
-            "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+            "identifier_noresep" => $identifier_resep->identifier_noresep,
+            "identifier_noresep_index" => $identifier_resep->identifier_noresep_index,
             "local_id" => (string) $obt['id_local'] ?? "",
             "kfa_code" => $obt['kfa_code'] ?? "",
             "kfa_display" => $obt['kfa_display'] ?? "",
@@ -2712,7 +2712,7 @@ class SshtApiClientController extends Controller
             ])
             ->from('ssht_medication_request')
             // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
-            ->where(['identifier_noresep_index' => $payloadMedication['identifier_resep_index']])
+            ->where(['identifier_noresep_index' => $payloadMedication['identifier_noresep_index']])
             ->one($dbLocal);
 
           // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
@@ -2721,7 +2721,7 @@ class SshtApiClientController extends Controller
           }
 
           if (!$debugger->allow(
-            context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_resep_index']],
+            context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
             payload: $payloadMedication,
           )) {
             continue;
@@ -2733,8 +2733,8 @@ class SshtApiClientController extends Controller
             'medication_idIHS' => $obt['medication_idIHS'] ?? '', // uuid
             'encounter_idIHS' => $encounterIdIHS, // uuid
 
-            'identifier_noresep' => $payloadMedication["identifier_resep"],
-            'identifier_noresep_index' => $payloadMedication["identifier_resep_index"],
+            'identifier_noresep' => $payloadMedication["identifier_noresep"],
+            'identifier_noresep_index' => $payloadMedication["identifier_noresep_index"],
 
             // 'contained' => '', // text
 
@@ -2785,7 +2785,7 @@ class SshtApiClientController extends Controller
 
           ])->execute();
 
-          echo "   > MedicationRequest identifier generated: " . ($payloadMedication["identifier_resep_index"] ?? 'FAILED') . "\n";
+          echo "   > MedicationRequest identifier generated: " . ($payloadMedication["identifier_noresep_index"] ?? 'FAILED') . "\n";
           print_r(json_encode($payloadMedication));
         }
       }
@@ -2877,8 +2877,8 @@ class SshtApiClientController extends Controller
           "practition_idIHS" => $record['practition_idIHS'],
           "practition_nama" => $record['practition_nama'],
           "inprogress_end" => $record['inprogress_end'],
-          "identifier_resep" => $identifier_resep->identifier_resep,
-          "identifier_resep_index" => $identifier_resep->identifier_resep_index,
+          "identifier_noresep" => $identifier_resep->identifier_noresep,
+          "identifier_noresep_index" => $identifier_resep->identifier_noresep_index,
           "local_id" => (string) $obt['id_local'] ?? "",
           "kfa_code" => $obt['kfa_code'] ?? "",
           "kfa_display" => $obt['kfa_display'] ?? "",
@@ -2892,8 +2892,8 @@ class SshtApiClientController extends Controller
             ? json_decode($obt['kfa_route'], true)
             : "",
           "jumlah" => (string) trim($obt['jumlah']),
-          // "kali" => (string) trim($obt['kali']),
-          // "hari" => (string) trim($obt['hari']),
+          "kali" => SshtApiUtil::parseDosisFrekuensiLocal((string) trim($obt['kali'])),
+          "hari" => (string) trim($obt['hari']), // dosis harian
           "aturanpakai" => $aturanpakai,
         ];
 
@@ -2907,7 +2907,7 @@ class SshtApiClientController extends Controller
         //   ])
         //   ->from('ssht_medication_request')
         //   // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
-        //   ->where(['identifier_noresep_index' => $payloadMedication['identifier_resep_index']])
+        //   ->where(['identifier_noresep_index' => $payloadMedication['identifier_noresep_index']])
         //   ->one($dbLocal);
         //
         // // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
@@ -2916,7 +2916,7 @@ class SshtApiClientController extends Controller
         // }
 
         if (!$debugger->allow(
-          context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_resep_index']],
+          context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
           payload: $payloadMedication,
         )) {
           continue;
@@ -2929,8 +2929,8 @@ class SshtApiClientController extends Controller
             'medication_idIHS' => $payloadMedication["medication_idIHS"] ?? "", // uuid
             'encounter_idIHS' => $encounterIdIHS, // uuid
 
-            'identifier_noresep' => $payloadMedication["identifier_resep"],
-            'identifier_noresep_index' => $payloadMedication['identifier_resep_index'],
+            'identifier_noresep' => $payloadMedication["identifier_noresep"],
+            'identifier_noresep_index' => $payloadMedication['identifier_noresep_index'],
 
             // 'contained' => '', // text
 
@@ -2984,7 +2984,7 @@ class SshtApiClientController extends Controller
           continue;
         }
 
-        echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_resep_index'] ?? 'FAILED') . "\n";
+        echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_noresep_index'] ?? 'FAILED') . "\n";
         print_r(json_encode($payloadMedication));
       }
     }
@@ -3060,7 +3060,7 @@ class SshtApiClientController extends Controller
               'updated_at' => date('Y-m-d H:i:s'),
             ],
             [
-              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              'identifier_noresep_index' => $payload["identifier_noresep_index"],
             ]
           )->execute();
 
@@ -3112,7 +3112,7 @@ class SshtApiClientController extends Controller
               'updated_at' => date('Y-m-d H:i:s'),
             ],
             [
-              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              'identifier_noresep_index' => $payload["identifier_noresep_index"],
             ]
           )->execute();
           continue;
@@ -3185,7 +3185,7 @@ class SshtApiClientController extends Controller
               'send_error_code' => ''
             ],
             [
-              'identifier_noresep_index' => $payload["identifier_resep_index"],
+              'identifier_noresep_index' => $payload["identifier_noresep_index"],
               // 'updated_at' => date('Y-m-d H:i:s'),
             ]
           )->execute();
@@ -3204,7 +3204,7 @@ class SshtApiClientController extends Controller
             'updated_at' => date('Y-m-d H:i:s'),
           ],
           [
-            'identifier_noresep_index' => $payload["identifier_resep_index"],
+            'identifier_noresep_index' => $payload["identifier_noresep_index"],
           ]
         )->execute();
         continue;
@@ -3286,7 +3286,7 @@ class SshtApiClientController extends Controller
           ])
           ->from('ssht_medication_dispense')
           // ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
-          ->where(['identifier_noresep_index' => $payloadMedication['identifier_resep_index']])
+          ->where(['identifier_noresep_index' => $payloadMedication['identifier_noresep_index']])
           ->one($dbLocal);
 
         // checking jika sudah ada di ssht_medication_request untuk identifier_noresep_index biar tidak double..
@@ -3295,7 +3295,7 @@ class SshtApiClientController extends Controller
         }
 
         if (!$debugger->allow(
-          context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_resep_index']],
+          context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
           payload: $payloadMedication,
         )) {
           continue;
@@ -3308,8 +3308,8 @@ class SshtApiClientController extends Controller
           'medicationrequest_idIHS' => $payloadMedication['medicationRequest_idIHS'], // uuid
           'encounter_idIHS' => $encounterIdIHS, // uuid
 
-          'identifier_noresep' => $payloadMedication["identifier_resep"],
-          'identifier_noresep_index' => $payloadMedication["identifier_resep_index"],
+          'identifier_noresep' => $payloadMedication["identifier_noresep"],
+          'identifier_noresep_index' => $payloadMedication["identifier_noresep_index"],
 
           'rm'              => $payloadMedication['rm'], // string:7
           'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
@@ -3417,7 +3417,7 @@ class SshtApiClientController extends Controller
       ]);
 
       if (!$debugger->allow(
-        context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_resep_index']],
+        context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
         payload: $payloadMedication,
       )) {
         continue;
@@ -3431,8 +3431,8 @@ class SshtApiClientController extends Controller
           'medicationrequest_idIHS' => $payloadMedication['medicationRequest_idIHS'], // uuid
           'encounter_idIHS' => $encounterIdIHS, // uuid
 
-          'identifier_noresep' => $payloadMedication["identifier_resep"],
-          'identifier_noresep_index' => $payloadMedication["identifier_resep_index"],
+          'identifier_noresep' => $payloadMedication["identifier_noresep"],
+          'identifier_noresep_index' => $payloadMedication["identifier_noresep_index"],
 
           'rm'              => $payloadMedication['rm'], // string:7
           'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
@@ -3460,7 +3460,7 @@ class SshtApiClientController extends Controller
 
         ])->execute();
 
-        echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_resep_index'] ?? 'FAILED') . "\n";
+        echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_noresep_index'] ?? 'FAILED') . "\n";
         print_r(json_encode($payloadMedication));
       } catch (\yii\db\IntegrityException $e) {
         continue;
@@ -3534,12 +3534,12 @@ class SshtApiClientController extends Controller
             'updated_at' => date('Y-m-d H:i:s'),
           ],
           [
-            'identifier_noresep_index' => $payload["identifier_resep_index"],
+            'identifier_noresep_index' => $payload["identifier_noresep_index"],
           ]
         )->execute();
 
 
-        $this->stdout("[-] {$payload['identifier_resep_index']} dengan Obat: {$payload['local_id']} Perlu dimaping KFA dan Sync Medication.. \n");
+        $this->stdout("[-] {$payload['identifier_noresep_index']} dengan Obat: {$payload['local_id']} Perlu dimaping KFA dan Sync Medication.. \n");
         // return;
         continue;
       }
@@ -3586,7 +3586,7 @@ class SshtApiClientController extends Controller
             'updated_at' => date('Y-m-d H:i:s'),
           ],
           [
-            'identifier_noresep_index' => $payload["identifier_resep_index"],
+            'identifier_noresep_index' => $payload["identifier_noresep_index"],
           ]
         )->execute();
         continue;
@@ -3640,7 +3640,7 @@ class SshtApiClientController extends Controller
             'send_error_code' => ''
           ],
           [
-            'identifier_noresep_index' => $payload["identifier_resep_index"],
+            'identifier_noresep_index' => $payload["identifier_noresep_index"],
             // 'updated_at' => date('Y-m-d H:i:s'),
           ]
         )->execute();

@@ -137,4 +137,22 @@ class SshtApiUtil
     // 3 x 1 Tablet sesudah makan
     return (string) $kali . ' X ' . ' ' . $hari . ' ' . $sediaan . ' ' . $waktu;
   }
+
+  public static function parseDosisFrekuensiLocal(string $kali): string
+  {
+    // helper untuk parse frekuensi dosis yang int nilai misal: 3
+    // di local yang format varchar
+    // untuk parsing misal $kali itu ada case bentukannya: 1-2
+    $dosisFrekuensi = explode('-', (string) $kali);
+    // $dosisHarian = str_split($kali);
+    return (string) $dosisFrekuensi[0];
+  }
+
+  // public static function parseDosisHarianLocal(string $hari) 
+  // {
+  //   // $dosisHarian = explode('-', $hari);
+  //   $dosisHarian = str_split($hari);
+  //
+  //   return 
+  // }
 }
