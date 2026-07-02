@@ -356,53 +356,78 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
   public static function queryLabRalan(string $tanggal, string $rm)
   {
-    $db1 = Yii::$app->db;
-
-    // select lnb.tanggal, lnb.rm, 
-    // lis_hasil.*,
-    // lab_transaksi.notest,
-    // lab_transaksi.kode_trn, 
-    // harga_laborat.nama, 
-    // lab_transaksi.jenis_trn 
-    // from ( 
-    //   select lab_newbiodata.*
-    //   from lab_newbiodata
-    //   where lab_newbiodata.rm = '320904' and lab_newbiodata.tanggal = '2025-09-29'
-    // ) as lnb
-    // left join lis_hasil on lnb.NoTest = lis_hasil.SAMPEL_ID
-    // left join lab_product on lis_hasil.TEST_ID = lab_product.id_lab
-    // left join lab_transaksi on lnb.NoTest = lab_transaksi.notest
-    // left join harga_laborat on lab_transaksi.kode_trn = harga_laborat.test_id;
-
-    $sub = (new Query())
-      ->select('*')
-      ->from('lab_newbiodata')
-      ->where([
-        'rm' => '320904',
-        'tanggal' => '2025-09-29',
-      ]);
-
-    $query = (new Query())
+    // query lab
+    $result = (new Query())
       ->select([
-        'lnb.tanggal',
+        'lnb.Id',
         'lnb.rm',
-        'lis_hasil.*',
-        'lab_transaksi.notest',
-        'lab_transaksi.kode_trn',
-        'harga_laborat.nama',
-        'lab_transaksi.jenis_trn',
+        'lnb.nama',
+        'lnb.tanggal',
+        'lnb.NoTest',
+        'lnb.d_kirim', // dokter request
+        'lnb.d_nkirim', // nama dokter
+        'ltx.notest',
+        'ltx.kode_trn',
+        'ltx.jenis_trn',
+        'hgl.test_id',
+        'hgl.specimen',
+        'hgl.specimen_code',
+        'hgl.specimen_display',
+        'hgl.loinc_order_code',
+        'hgl.loinc_order_display',
       ])
-      ->from(['lnb' => $sub])
-      ->leftJoin('lis_hasil', 'lnb.NoTest = lis_hasil.SAMPEL_ID')
-      ->leftJoin('lab_product', 'lis_hasil.TEST_ID = lab_product.id_lab')
-      ->leftJoin('lab_transaksi', 'lnb.NoTest = lab_transaksi.notest')
-      ->leftJoin('harga_laborat', 'lab_transaksi.kode_trn = harga_laborat.test_id');
+      ->from(['lnb' => 'lab_newbiodata'])
+      ->innerJoin(['ltx' => 'lab_transaksi'], 'lnb.NoTest = ltx.notest')
+      ->innerJoin(['hgl' => 'harga_laborat'], 'ltx.kode_trn = hgl.test_id')
+      ->where([
+        'lnb.tanggal' => $tanggal,
+        'lnb.rm' => $rm,
+      ])
+      ->all(Yii::$app->db);
 
-    $data = $query->all($db1);
-
-    if (!$data) {
+    if (!$result) {
       return false;
     }
+
+    $first = $result[0]; // get first data for prerequisites
+    $data['prereq'] = [
+      'tanggal' => $tanggal,
+      'rm_pasien' => $rm,
+      'nama_pasien' => $first['nama'], // mmr.nama
+      'kode_dokter' => $first['d_kirim'], // muser.id_user
+      'nama_dokter' => $first['d_nkirim'], // muser.rl_user
+      'class' => 'AMB', // ambulatory (rawat jalan)
+    ];
+
+    $labResult = [];
+    $testIds = []; // prevent duplicates
+    foreach ($result as $row) {
+      $testId = $row['test_id'];
+      if (in_array($testId, $testIds)) {
+        continue;
+      }
+
+      $testIds[] = $testId;
+      $labResult[] = [
+        'svc_req' => [
+          'nama_lokal' => $row['jenis_trn'],
+          'service_req_code' => $row['notest'] . '-' . $row['kode_trn'], // lab_newbiodata
+          'loinc_order_code' => $row['loinc_order_code'], // harga_laborat.loinc_order_code
+          'loinc_order_display' => $row['loinc_order_display'], // harga_laborat.loinc_order_display
+          'kategori' => $row['specimen'], // harga_laborat.specimen
+        ],
+        'specimen' => [
+          'sample_id' => $row['notest'] . '-' . $row['specimen_code'],
+          'specimen_code' => $row['specimen_code'], // not mapped yet
+          'specimen_display' => $row['specimen_display'], // not mapped yet
+          'sampling_method' => $row['specimen'], // harga_laborat.specimen
+        ],
+      ];
+
+      $rows[] = $row;
+    }
+    // return $rows;
+    $data['lab_result'] = $labResult;
 
     return $data;
   }

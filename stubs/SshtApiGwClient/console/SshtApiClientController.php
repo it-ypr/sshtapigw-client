@@ -808,6 +808,24 @@ class SshtApiClientController extends Controller
   public function actionSendProcedureDanObservationEco($tgl_param) {}
   public function actionSendProcedureDanObservationNebulasi($tgl_param) {}
 
+
+  /**
+   * Run Cron: php yii ssht-api-client/lab-ralan-test 2026-05-01 rm
+   */
+  public static function actionLabRalanTest(string $tgl_param, string $rm_param)
+  {
+    $dataLabRalan = SshtApiQueryMapping::queryLabRalan($tgl_param, $rm_param);
+
+    if (empty($dataLabRalan)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($dataLabRalan) . " data.\n";
+    print_r($dataLabRalan);
+    // print_r($dataLabRalan[0]);
+  }
+
   public function actionSendServiceRequestLab($tgl_param) {}
   public function actionSendSpecimentLab($tgl_param) {}
   public function actionSendObservationDanDiagnosticReportLab($tgl_param) {}
