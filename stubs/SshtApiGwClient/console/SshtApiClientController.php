@@ -826,6 +826,277 @@ class SshtApiClientController extends Controller
     // print_r($dataLabRalan[0]);
   }
 
+  public function actionSendServiceRequestAndSpecimentLab(string $tgl_param)
+  {
+    $class = 'AMB';
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $encounters = (new Query())
+      ->select(['idIHS', 'subject_rm', 'inprogress_start', 'class'])
+      ->from('ssht_encounter')
+      ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
+      ->andWhere(['class' => $class])
+      ->all($dbLocal);
+
+    if (empty($encounters)) {
+      $this->stdout("[!] Tydac ada data encounter tanggal {$tgl_param}\n");
+      return;
+    }
+
+    foreach ($encounters as $enc) {
+      $rm = $enc['subject_rm'];
+
+      $dataLabRalan = SshtApiQueryMapping::queryLabRalan($tgl_param, $rm);
+
+      if (!$dataLabRalan || empty($dataLabRalan)) {
+        $this->stdout("[-] SKIP: RM $rm tydac ada order Lab\n");
+        continue;
+      }
+
+      foreach ($dataLabRalan['lab_result'] as $lab) {
+
+        // payload ServiceRequestLab
+        $payload = [
+          "sampleID" => $lab["svc_req"]["service_req_code"],
+          "category" => $lab["svc_req"]["kategori"], // snomed code from (lab)
+          "serviceReqCode" => $lab["svc_req"]["loinc_order_code"], // loinc code
+          "serviceReqDisplay" => $lab["svc_req"]["loinc_order_display"], // loinc display
+          "reason" => $lab["svc_req"]["nama_lokal"], // text
+          "encounter_idIHS" => $enc["idIHS"],
+          "dokter" => $enc["practition_lokalid"],
+          "rm" => $enc["subject_rm"],
+          "petugaslab_idIHS" => "required",
+          "petugaslab_nama" => "required"
+        ];
+
+        $now = date('Y-m-d H:i:s');
+        $dbLocal->createCommand()->insert('ssht_servicerequest', [
+          'servicerequest_idIHS' => '',
+          'encounter_idIHS' => $payload['encounter_idIHS'],
+          'rm' => $rm,
+          'patient_idIHS' => $enc['subject_idIHS'] ?? null,
+          'petugas_idIHS' => $payload['petugas_idIHS'],
+          'petugas_nama' => $payload['petugas_nama'],
+          'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+          'dok' => $payload['dokter'] ?? null,
+          'date' => $enc['inprogress_end'],
+          'created_at' => $now,
+          'updated_at' => $now,
+        ])->execute();
+
+
+        $idSr = $dbLocal->getLastInsertID();
+
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_RAD),
+          payload: $payload,
+        )) {
+          continue;
+        }
+
+        // // 3. Kirim via Wrapper
+        $response = SshtApiBase::request(
+          SshtApiUrl::SERVICE_REQUEST_CREATE_LAB,
+          ['json' => $payload]
+        );
+
+        $result = json_decode((string)$response->getBody(), true);
+
+        if (isset($result['status']) && ($result['status'] == 'true')) {
+          $data_api = $result['data'] ?? [];
+          $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
+
+          // 4. Save to Local DB
+          $now = date('Y-m-d H:i:s');
+          $dbLocal->createCommand()->update(
+            'ssht_servicerequest',
+            [
+              'servicerequest_idIHS' => $sr_id_ihs,
+              'encounter_idIHS' => $enc['idIHS'],
+              'acsn' => $data_api['acsn'] ?? null,
+              'category_code' => $data_api['category_code'] ?? null,
+              'category_display' => $data_api['category_display'] ?? null,
+              'code' => $data_api['code'] ?? null,
+              'display' => $data_api['display'] ?? null,
+              'perihal' => $data_api['perihal'] ?? null,
+              'rm' => $rm,
+              'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+              'petugas_idIHS' => $payload['petugas_idIHS'],
+              'petugas_nama' => $payload['petugas_nama'],
+              'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+              'dok' => $data_api['dok'] ?? null,
+              'date' => $data_api['date'],
+              'status' => 'active',
+              'updated_at' => $now,
+              'srid' => $data_api['srid'],
+
+              'payload' => json_encode($payload),
+              'send_status' => 'S',
+            ],
+            [
+              'id' => $idSr
+              // 'rm' => $enc['rm'],
+              // 'date' => $data_api['date'],
+              // 'encounter_idIHS' => $enc['idIHS']
+            ]
+          )->execute();
+
+
+          // SPECIMENT
+
+          // Get servicerequest_idIHS
+          $checkSr = (new Query())
+            ->from('ssht_servicerequest')
+            ->where(['id' => $idSr])
+            // ->where(['rm' => $rm])
+            // ->andWhere(['like', 'date', $tgl_param])
+            // ->andWhere(['encounter_idIHS' => $enc["idIHS"]])
+            ->exists($dbLocal);
+
+          if ($checkSr) {
+
+            // payload Speciment
+            $payloadSpeciment = [
+              "sampleID" => $lab["specimen"]["sample_id"],
+              "servicerequest_idIHS" => $sr_id_ihs,
+              "encounter_idIHS" => $enc["idIHS"],
+              "speciment_code" => $lab["specimen"]["specimen_code"],
+              "speciment_display" => $lab["specimen"]["specimen_display"],
+              "sampling_method" => $lab["specimen"]["sampling_method"],
+              "rm" => $rm,
+              "dok" => $enc['practition_lokalid'],
+            ];
+
+
+            $now = date('Y-m-d H:i:s');
+            $dbLocal->createCommand()->insert('ssht_speciment', [
+              'servicerequest_idIHS' => '',
+              'encounter_idIHS' => $payload['encounter_idIHS'],
+              'rm' => $rm,
+              'patient_idIHS' => $enc['subject_idIHS'] ?? null,
+              'petugas_idIHS' => $payload['petugas_idIHS'],
+              'petugas_nama' => $payload['petugas_nama'],
+              'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+              'dok' => $payload['dokter'] ?? null,
+              "sampleID" => $lab["specimen"]["sample_id"],
+              "encounter_idIHS" => $enc["idIHS"],
+              "speciment_code" => $lab["specimen"]["specimen_code"],
+              "speciment_display" => $lab["specimen"]["specimen_display"],
+              "sampling_method" => $lab["specimen"]["sampling_method"],
+              'updated_at' => $now,
+            ])->execute();
+
+
+            if (!$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
+              payload: $payloadSpeciment,
+            )) {
+              continue;
+            }
+
+            $response = SshtApiBase::request(
+              SshtApiUrl::SPECIMENT_CREATE,
+              ['json' => $payloadSpeciment]
+            );
+
+          $result = json_decode((string)$response->getBody(), true);
+
+          if (isset($result['status']) && ($result['status'] == 'true')) {
+            $data_api = $result['data'] ?? [];
+            $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
+
+            // 4. Save to Local DB
+            $now = date('Y-m-d H:i:s');
+            $dbLocal->createCommand()->update(
+              'ssht_speciment',
+              [
+                'servicerequest_idIHS' => $sr_id_ihs,
+                'encounter_idIHS' => $enc['idIHS'],
+                'acsn' => $data_api['acsn'] ?? null,
+                'category_code' => $data_api['category_code'] ?? null,
+                'category_display' => $data_api['category_display'] ?? null,
+                'code' => $data_api['code'] ?? null,
+                'display' => $data_api['display'] ?? null,
+                'perihal' => $data_api['perihal'] ?? null,
+                'rm' => $rm,
+                'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+                'petugas_idIHS' => $payload['petugas_idIHS'],
+                'petugas_nama' => $payload['petugas_nama'],
+                'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+                'dok' => $data_api['dok'] ?? null,
+                'date' => $data_api['date'],
+                'status' => 'active',
+                'updated_at' => $now,
+                'srid' => $data_api['srid'],
+
+                'payload' => json_encode($payload),
+                'send_status' => 'S',
+              ],
+              [
+                'rm' => $enc['rm'],
+                'date' => $data_api['date'],
+                'encounter_idIHS' => $enc['idIHS']
+              ]
+            )->execute();
+
+          } else {
+
+            $now = date('Y-m-d H:i:s');
+            $dbLocal->createCommand()->update(
+              'ssht_speciment',
+              [
+                'payload' => json_encode($payload),
+                'send_status' => 'F',
+                'send_error_code' => $response->getStatusCode(),
+                'send_error_message' => isset($result["errors"]) ? json_encode($result['errors']) : $response->getMessage(),
+                'updated_at' => $now,
+              ],
+              [
+                'rm' => $enc['rm'],
+                'date' => $data_api['date'],
+                'encounter_idIHS' => $enc['idIHS']
+              ]
+            )->execute();
+
+          }
+
+          // end if sukses send ServiceRequest
+        } else {
+          // 4. Save to Local DB
+          $now = date('Y-m-d H:i:s');
+          $dbLocal->createCommand()->update(
+            'ssht_servicerequest',
+            [
+              'payload' => json_encode($payload),
+              'send_status' => 'F',
+              'send_error_code' => $response->getStatusCode(),
+              'send_error_message' => isset($result["errors"]) ? json_encode($result['errors']) : $response->getMessage(),
+              'updated_at' => $now,
+            ],
+            [
+              'id' => $idSr
+              // 'rm' => $enc['rm'],
+              // 'date' => $data_api['date'],
+              // 'encounter_idIHS' => $enc['idIHS']
+            ]
+          )->execute();
+          // continue;
+          // end else
+        }
+        // endforeach lab result
+      }
+      // endforeach encounter
+    }
+  }
+
   public function actionSendServiceRequestLab($tgl_param) {}
   public function actionSendSpecimentLab($tgl_param) {}
   public function actionSendObservationDanDiagnosticReportLab($tgl_param) {}
