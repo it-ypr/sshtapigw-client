@@ -134,25 +134,36 @@ class SshtApiUtil
     string $sediaan = '', // tablet, ML , salep
     string $waktu = '' // sesudah makan, Sesudah makan, 
   ): string {
+    if (empty(trim($kali)) && empty(trim($hari))) {
+      return "-";
+    }
     // 3 x 1 Tablet sesudah makan
-    return (string) $kali . ' X ' . ' ' . $hari . ' ' . $sediaan . ' ' . $waktu;
+    return (string) trim($kali) . ' X ' . trim($hari) . ' ' . trim($sediaan) . ' ' . trim($waktu);
   }
 
   public static function parseDosisFrekuensiLocal(string $kali): string
   {
+    // if (str_contains($kali, "/")) {
+    //   $dosisFrekuensi = explode('/', (string) trim($kali));
+    //   return $dosisFrekuensi[0];
+    // }
     // helper untuk parse frekuensi dosis yang int nilai misal: 3
     // di local yang format varchar
     // untuk parsing misal $kali itu ada case bentukannya: 1-2
-    $dosisFrekuensi = explode('-', (string) $kali);
+    $dosisFrekuensi = explode('-', (string) trim($kali));
     // $dosisHarian = str_split($kali);
     return (string) $dosisFrekuensi[0];
   }
 
-  // public static function parseDosisHarianLocal(string $hari) 
+  // rule: hari tidak boleh kosong, kalau bentukan pecahan harus pake decimal 0.x 
+  // public static function parseDosisHarianLocal(string $hari)
   // {
-  //   // $dosisHarian = explode('-', $hari);
-  //   $dosisHarian = str_split($hari);
-  //
-  //   return 
+  //   // 1. cek kosong atau tidak -> 1
+  //   // 2. cek ada alfabeth -> 1
+  //   // 3. cek apakah data hanya "-" 
+  //   // 3.1. true -> 1
+  //   // 4. cek apakah string length lebih dari 2, dan ada "/" (untuk string pecahan)
+  //   // 4.1. true -> parse jadi float
+  //   // 5. return float 
   // }
 }

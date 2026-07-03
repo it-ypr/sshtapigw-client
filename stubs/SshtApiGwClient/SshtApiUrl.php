@@ -286,6 +286,29 @@ class SshtApiUrl
   public const SERVICE_REQUEST_GET = "ssht/service-request/get";
   public const SERVICE_REQUEST_CREATE = "ssht/service-request/create";
 
+  // Service Request LAB
+
+  /**
+   * Create ServiceRequest Lab.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/service-request/lab/create
+   * Body JSON:
+   * {
+   *    "sampleID" => "required",
+   *    "category" => ["required", new CategoryRules], // snomed code from (lab)
+   *    "serviceReqCode" => "required", // loinc code
+   *    "serviceReqDisplay" => "required", // loinc display
+   *    "reason" => "required", // text
+   *    "encounter_idIHS" => "string|uuid (required) - id encounter",
+   *    "dokter" => "string (required) - nama/kode dokter",
+   *    "rm" => "string (required) - nomor rekam medis",
+   *    "petugaslab_idIHS" => "required",
+   *    "petugaslab_nama" => "required"
+   * }
+   */
+  public const SERVICE_REQUEST_CREATE_LAB = ["POST", "ssht/service-request/lab/create"];
+
   /**
    * Create ServiceRequest Radiologi.
    *
