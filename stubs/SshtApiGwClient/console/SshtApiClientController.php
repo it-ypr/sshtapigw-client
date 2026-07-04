@@ -827,11 +827,12 @@ class SshtApiClientController extends Controller
   }
 
   /**
-   * Run Cron: php yii ssht-api-client/send-service-request-lab-ralan-single 2026-05-01 rm
-   * Testing body response from backend
+   * Run Cron: php yii ssht-api-client/send-service-request-lab-dan-speciment-ralan-single 2026-05-01 rm
    */
-  public function actionSendServiceRequestLabRalanSingle(string $tgl_param, string $rm)
-  {
+  public function actionSendServiceRequestLabDanSpecimentRalanSingle(
+    string $tgl_param,
+    string $rm
+  ) {
     $class = 'AMB';
 
     $dbLocal = Yii::$app->sshtAPIdb;
@@ -887,7 +888,8 @@ class SshtApiClientController extends Controller
 
         print_r($payload);
 
-        // $now = date('Y-m-d H:i:s');
+        $now = date('Y-m-d H:i:s');
+
         // $dbLocal->createCommand()->insert('ssht_servicerequest', [
         //   'servicerequest_idIHS' => '',
         //   'encounter_idIHS' => $payload['encounter_idIHS'],
@@ -904,28 +906,213 @@ class SshtApiClientController extends Controller
         //
         // $idSr = $dbLocal->getLastInsertID();
 
-        try {
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
-            payload: $payload,
-          )) {
-            continue;
-          }
-
-          // // 3. Kirim via Wrapper
-          $response = SshtApiBase::request(
-            SshtApiUrl::SERVICE_REQUEST_CREATE_LAB,
-            ['json' => $payload]
-          );
-
-          $result = json_decode((string) $response->getBody(), true);
-          print_r(json_encode($result));
-          // exit;
-        } catch (\Exception $e) {
-          print_r($e->getMessage());
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
+          payload: $payload,
+        )) {
           continue;
         }
+
+        // // 3. Kirim via Wrapper
+        $response = SshtApiBase::request(
+          SshtApiUrl::SERVICE_REQUEST_CREATE_LAB,
+          ['json' => $payload]
+        );
+
+        $result = json_decode((string) $response->getBody(), true);
+        print_r(json_encode($result));
+
+        if (isset($result['status']) && ($result['status'] == 'true')) {
+          $data_api = $result['data'] ?? [];
+          $sr_id_ihs = $data_api['servicerequest_idIHS'] ?? null;
+
+          // 4. Save to Local DB
+          $now = date('Y-m-d H:i:s');
+          // $dbLocal->createCommand()->update(
+          $dbLocal->createCommand()->insert(
+            'ssht_servicerequest',
+            [
+              'servicerequest_idIHS' => $sr_id_ihs,
+              'encounter_idIHS' => $enc['idIHS'],
+              'acsn' => $data_api['acsn'] ?? null,
+              'category_code' => $data_api['category_code'] ?? null,
+              'category_display' => $data_api['category_display'] ?? null,
+              'code' => $data_api['code'] ?? null,
+              'display' => $data_api['display'] ?? null,
+              'perihal' => $data_api['perihal'] ?? null,
+              'rm' => $rm,
+              'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+              'petugas_idIHS' => $payload['petugaslab_idIHS'],
+              'petugas_nama' => $payload['petugaslab_nama'],
+              'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+              'dok' => $data_api['dok'] ?? null,
+              'date' => $data_api['date'],
+              'status' => 'active',
+              'created_at' => $now,
+              'updated_at' => $now,
+              'srid' => $data_api['srid'],
+
+              // 'payload' => json_encode($payload),
+              // 'send_status' => 'S',
+            ]
+            // ],
+            // [
+            //   'id' => $idSr,
+            // ]
+          )->execute();
+        } else {
+          // $now = date('Y-m-d H:i:s');
+          // $dbLocal->createCommand()->update(
+          //   'ssht_servicerequest',
+          //   [
+          //     'payload' => json_encode($payload),
+          //     'send_status' => 'F',
+          //     'send_error_code' => $response->getStatusCode(),
+          //     'send_error_message' => isset($result["errors"]) ? json_encode($result['errors']) : $response->getMessage(),
+          //     'updated_at' => $now,
+          //   ],
+          //   [
+          //     'id' => $idSr,
+          //   ]
+          // )->execute();
+          continue;
+        }
+
+        // SPECIMENT
+
+        $payloadSpeciment = [
+          "sampleID" => $lab["specimen"]["sample_id"],
+          "servicerequest_idIHS" => $sr_id_ihs,
+          "encounter_idIHS" => $enc["idIHS"],
+          "speciment_code" => $lab["specimen"]["specimen_code"],
+          "speciment_display" => $lab["specimen"]["specimen_display"],
+          "sampling_method" => $lab["specimen"]["sampling_method"],
+          "rm" => $rm,
+          "dok" => $enc['practition_lokalid'],
+        ];
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
+          payload: $payloadSpeciment,
+        )) {
+          continue;
+        }
+
+        $this->sendSpecimentRalanSingle(
+          $rm,
+          $enc,
+          $payload,
+          $lab,
+          $dataLabRalan,
+          $payloadSpeciment,
+          $sr_id_ihs
+        );
       }
+    }
+  }
+
+  private function sendSpecimentRalanSingle(
+    $rm,
+    $enc,
+    $payload,
+    $lab,
+    $dataPreReqLab,
+    $payloadSpeciment,
+    $sr_id_ihs
+  ) {
+    $class = 'AMB';
+
+    $dbLocalSpeciment = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    // // save payload speciment ke db..
+    // $now = date('Y-m-d H:i:s');
+    // $dbLocalSpeciment->createCommand()->insert('ssht_speciment', [
+    //   'speciment_idIHS' => '',
+    //   'servicerequest_idIHS' => $sr_id_ihs,
+    //   'encounter_idIHS' => $payloadSpeciment['encounter_idIHS'],
+    //   'rm' => $rm,
+    //   'patient_idIHS' => $enc['subject_idIHS'] ?? null,
+    //   'petugas_idIHS' => $payload['petugas_idIHS'],
+    //   'petugas_nama' => $payload['petugas_nama'],
+    //   'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+    //   'dok' => $payloadSpeciment['dokter'] ?? null,
+    //   "sampleID" => $lab["specimen"]["sample_id"],
+    //   "encounter_idIHS" => $enc["idIHS"],
+    //   "speciment_code" => $lab["specimen"]["specimen_code"],
+    //   "speciment_display" => $lab["specimen"]["specimen_display"],
+    //   "sampling_method" => $lab["specimen"]["sampling_method"],
+    //   'updated_at' => $now,
+    // ])->execute();
+    //
+    // // id Speciment
+    // $idSpec = $dbLocalSpeciment->getLastInsertID();
+
+    $response = SshtApiBase::request(
+      SshtApiUrl::SPECIMENT_CREATE,
+      ['json' => $payloadSpeciment]
+    );
+
+    $result = json_decode((string)$response->getBody(), true);
+
+    if (isset($result['status']) && ($result['status'] == 'true')) {
+      $data_api = $result['data'] ?? [];
+
+      $spe_id_ihs = $data_api['speciment_idIHS'] ?? null;
+
+      // 4. Save to Local DB
+      $now = date('Y-m-d H:i:s');
+
+      // $dbLocalSpeciment->createCommand()->update(
+      $dbLocalSpeciment->createCommand()->insert(
+        'ssht_speciment',
+        [
+          'speciment_idIHS' => $spe_id_ihs,
+          'servicerequest_idIHS' => $data_api['servicerequest_idIHS'],
+          'lokal_sampleID_testID' => $data_api['lokal_sampleID_testID'],
+          // 'encounter_idIHS' => $enc['idIHS'],
+          // 'acsn' => $data_api['acsn'] ?? null,
+          'method_code' => $data_api['method_code'] ?? null,
+          'method_display' => $data_api['method_display'] ?? null,
+          'code' => $data_api['code'] ?? null,
+          'display' => $data_api['display'] ?? null,
+          'rm' => $rm,
+          'dok' => $data_api['dok'] ?? null,
+          // 'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+          'laborat_ihs' => $payload['petugaslab_idIHS'],
+          'laborat_nama' => $payload['petugaslab_nama'],
+          // 'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+          'date' => $data_api['date'],
+          // 'status' => 'active',
+          'created_at' => $now,
+          'updated_at' => $now,
+
+          // 'payload' => json_encode($payload),
+          // 'send_status' => 'S',
+        ]
+        // ],
+        // [
+        //   'id' => $idSpec
+        // ]
+      )->execute();
+      $this->stdout("[+] Sukses Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$rm}, Speciment_idIHS: {$spe_id_ihs} \n");
+    } else {
+      // $now = date('Y-m-d H:i:s');
+      // $dbLocalSpeciment->createCommand()->update(
+      //   'ssht_speciment',
+      //   [
+      //     'payload' => json_encode($payload),
+      //     'send_status' => 'F',
+      //     'send_error_code' => $response->getStatusCode(),
+      //     'send_error_message' => isset($result["errors"]) ? json_encode($result['errors']) : $response->getMessage(),
+      //     'updated_at' => $now,
+      //   ],
+      //   [
+      //     'id' => $idSpec
+      //   ]
+      // )->execute();
+      $this->stdout("[-] Failed Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$enc['rm']} \n");
     }
   }
 
@@ -1080,7 +1267,6 @@ class SshtApiClientController extends Controller
               "rm" => $rm,
               "dok" => $enc['practition_lokalid'],
             ];
-
 
             $now = date('Y-m-d H:i:s');
             $dbLocal->createCommand()->insert('ssht_speciment', [

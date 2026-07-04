@@ -354,8 +354,38 @@ class SshtApiUrl
   public const IMAGINGSTUDY_GET = ['GET', 'ssht/imaging/get'];
 
   // Speciment
-  public const SPECIMENT_GET = "ssht/speciment/get";
-  public const SPECIMENT_CREATE = "ssht/speciment/create";
+
+  /**
+   * Get Speciment
+   * 
+   * Method: GET
+   * URL: api/v1/ssht/speciment/get
+   * Query Params:
+   * - id (required) : UUID4 - Format (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')
+   */
+  public const SPECIMENT_GET = ["GET", "ssht/speciment/get"];
+
+  /**
+   * Create Speciment
+   * 
+   * Method: POST
+   * URL: api/v1/ssht/speciment/create
+   * Body JSON:
+   * {
+   *    "sampleID" => "required",
+   *    "category" => ["required", new CategoryRules], // snomed code from (lab)
+   *    "serviceReqCode" => "required", // loinc code
+   *    "serviceReqDisplay" => "required", // loinc display
+   *    "reason" => "required", // text
+   *    "encounter_idIHS" => "required|uuid",
+   *    "dokter" => "required",
+   *    "rm" => "required",
+   *    "petugaslab_idIHS" => "required",
+   *    "petugaslab_nama" => "required"
+   * }
+   * 
+   */
+  public const SPECIMENT_CREATE = ["POST", "ssht/speciment/create"];
   public const SPECIMENT_UPDATE = "ssht/speciment/update";
 
 
@@ -610,6 +640,65 @@ class SshtApiUrl
    * }
    */
   public const MEDICATION_DISPENSE_GET = ["GET", "ssht/medication-dispense/get"];
+
+  // MEDICATION_ADMINISTRATION
+  /**
+   * Create MedicationAdministration.
+   *
+   * Method: POST
+   * URL: api/v1/ssht/medication-administration/create
+   *
+   * Body JSON:
+   * {
+   *    "medication_idIHS": "string (required|uuid) - ID IHS medication",
+   *    "medicationRequest_idIHS": "string (required|uuid) - ID IHS medication request",
+   *    "encounter_idIHS": "string (required|uuid) - ID IHS encounter",
+   *    "patient_idIHS": "string (required|max:50) - ID IHS pasien",
+   *    "patient_nama": "string (required|max:60) - nama pasien",
+   *    "rm": "string (required|max:10) - nomor rekam medis pasien",
+   *    "dok": "string (required|max:10) - kode dokter",
+   *    "performer_idIHS": "string (required|max:50) - ID IHS petugas farmasi",
+   *    "performer_nama": "string (required|max:60) - nama petugas farmasi",
+   *    "inprogress_end": "string (required|date) - tanggal selesai pengobatan (format: YYYY-MM-DD HH:mm:ss)",
+   *    "identifier_resep": "string (required|max:60) - nomor identifier resep",
+   *    "identifier_resep_index": "string (required|max:64) - identifier index resep",
+   *    "local_id": "string (required|max:60) - ID lokal obat/resep",
+   *    "kfa_code": "string (required|max:30) - kode KFA obat",
+   *    "kfa_display": "string (required) - nama obat berdasarkan KFA",
+   *    "kfa_bza": (required|array) [
+   *        {
+   *          "state": "string (required) - exp: valid",
+   *          "active": "boolean (required) - exp: true,
+   *          "kfa_code": "string (required|string|numeric|max:30) - kode kfa 91xxxxxx",
+   *          "zat_aktif": "string (required|string) - kfa_display (Paracetamol)",
+   *          "updated_at": "date (required) - exp: 2022-11-29 09:36:56",
+   *          "kekuatan_zat_aktif": "string (required|max:50) - kekuatan zat aktif (500 mg)"
+   *        }
+   *    ],
+   *    "kfa_form": {
+   *       "code": "string (required|max:10) - kode bentuk sediaan obat",
+   *       "name": "string (required|max:40) - nama bentuk sediaan obat"
+   *    },
+   *    "kfa_route": {
+   *       "code": "string (required|max:10) - kode rute pemberian obat",
+   *       "name": "string (required|max:40) - nama rute pemberian obat"
+   *    }
+   * }
+   */
+  public const MEDICATION_ADMINISTRATION_CREATE = ["POST", "ssht/medication-administration/create"];
+
+  /**
+   * Get MedicationDispense.
+   *
+   * Method: GET
+   * URL: api/v1/ssht/medication-administration/get
+   *
+   * Query Params:
+   * {
+   *   id (required) : UUID4 - Format (Example: d99eb2ec-889e-80d6-9976-4e0113c5401b)
+   * }
+   */
+  public const MEDICATION_ADMINISTRATION_GET = ["GET", "ssht/medication-administration/get"];
 
   // MISC
   public const CONSENT_CREATE = "ssht/misc/consent/create";
