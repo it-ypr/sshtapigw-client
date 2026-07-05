@@ -36,8 +36,12 @@ class SshtApiClientController extends Controller
     // observation & diagnosticReport Radiologi
     $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
     // medicationRequest & medicationDispense (inprogress)
-    // Lab - ServiceRequest (inprogress)
-    // Lab - Speciment (inprogress)
+    $this->actionGenerateMedicationRequestRalan($tgl_param);
+    // send medicationRequest & medicationDispense runing on split cron
+    // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
+    // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
+    // Lab - ServiceRequest & Speciment
+    $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
     // Lab - Observation & DiagnosticReport (inprogress)
     // EncounterFinish (inprogress)
   }
@@ -605,7 +609,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendEncounterFinishRalan($tgl_param)
   {
-    // $classEnc = 'AMB';
+    $classEnc = 'AMB';
     $dbLocal = Yii::$app->sshtAPIdb;
     $config = SshtApiBase::getConfig();
     $debugger = new SshtApiDebugger(
@@ -632,6 +636,7 @@ class SshtApiClientController extends Controller
         'class'
       ])->from('ssht_encounter')
       ->where(['like', 'arrived_start', $tgl_param . '%', false])
+      ->andWhere(['class' => $classEnc])
       ->all($dbLocal);
 
     foreach ($encounter as $record) {
