@@ -524,5 +524,37 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return $result;
   }
+
+  public static function getObservationLabLocalRalan(
+    string $tgl_param,
+    string $rm,
+    string $loinc_order
+  ) {
+    $db1 = Yii::$app->db;
+
+    // $config = SshtApiBase::getConfig();
+    $data = (new Query())
+      ->select([
+        'lis_hasil.*',
+        'lab_product.loinc',
+        'lab_product.loinc_order',
+      ])
+      ->from(['lnb' => 'lab_newbiodata'])
+      ->leftJoin('lis_hasil', 'lnb.NoTest = lis_hasil.SAMPEL_ID')
+      ->leftJoin('lab_product', 'lis_hasil.TEST_ID = lab_product.id_lab')
+      ->where([
+        'lab_product.loinc_order' => $loinc_order,
+        'lnb.rm' => $rm,
+        'lnb.tanggal' => $tgl_param,
+      ])
+      ->groupBy('lis_hasil.ID')
+      ->all();
+
+    if (!$data) {
+      return false;
+    }
+
+    return $data;
+  }
 }
 

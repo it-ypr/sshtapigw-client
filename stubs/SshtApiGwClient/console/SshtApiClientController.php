@@ -996,6 +996,28 @@ class SshtApiClientController extends Controller
           "dok" => $enc['practition_lokalid'],
         ];
 
+        $cekSpeciment = (new Query())
+          ->select([
+            'ssp.id',
+            'ssp.speciment_idIHS',
+            'ssp.servicerequest_idIHS',
+            'ssp.lokal_sampleID_testID',
+            'ssp.method_code',
+            'ssp.method_display',
+            'ssp.code',
+            'ssp.display',
+            'ssp.date',
+            'ssp.status',
+          ])
+          ->from('ssht_speciment ssp')
+          ->where(['ssp.lokal_sampleID_testID' => $payloadSpeciment])
+          ->exists($dbLocal);
+
+        if ($cekSpeciment) {
+          $this->stdout("[+] Skip Send cuz Duplicate Speciment detected, Rm: {$rm}, lokal_sampleID_testID: {$payloadSpeciment['sampleID']} \n");
+          continue;
+        }
+
         if (!$debugger->allow(
           context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
           payload: $payloadSpeciment,
@@ -1013,6 +1035,67 @@ class SshtApiClientController extends Controller
           $sr_id_ihs
         );
       }
+    }
+  }
+
+  public function actionSendObservationLabRalanSingle(
+    string $tgl_param,
+    string $rm
+  ) {
+    $class = 'AMB';
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $serviceRequestLab = (new Query())
+      ->select([
+        'ssr.servicerequest_idIHS',
+        'ssr.encounter_idIHS',
+        'ssr.category_code',
+        'ssr.category_display',
+        'ssr.code',
+        'ssr.display',
+        'ssr.perihal',
+        'ssr.rm',
+        'ssr.patient_idIHS',
+        'ssr.dok',
+        'ssr.dokter_request_idIHS',
+        'ssr.petugas_idIHS',
+        'ssr.petugas_nama',
+        'ssr.date',
+        'ssr.class',
+        'ssr.srid',
+        'ssp.speciment_idIHS',
+        'ssp.lokal_sampleID_testID',
+        'ssp.lokal_sampleID_testID',
+        'ssp.method_code',
+        'ssp.method_display',
+        'ssp.code',
+        'ssp.display',
+      ])
+      ->from('ssht_servicerequest ssr')
+      ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
+      ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
+      ->andWhere(['rm' => $rm])
+      ->andWhere(['status' => 'active'])
+      ->andWhere(['category_code' => '108252007'])
+      ->andWhere(['category_display' => 'Laboratory procedure'])
+      ->all($dbLocal);
+
+    if (empty($serviceRequestLab)) {
+      $this->stdout("[!] Tydac ada data order serviceRequestLab tanggal {$tgl_param}\n");
+      return;
+    }
+
+    foreach ($serviceRequestLab as $lab) {
+      $rm = $lab['rm'];
+
+      // SshtApiQueryMapping::getObservationLabLocalRalan($tgl_param, $rm, $loinc_order);
     }
   }
 
@@ -1069,39 +1152,46 @@ class SshtApiClientController extends Controller
       // 4. Save to Local DB
       $now = date('Y-m-d H:i:s');
 
-      // $dbLocalSpeciment->createCommand()->update(
-      $dbLocalSpeciment->createCommand()->insert(
-        'ssht_speciment',
-        [
-          'speciment_idIHS' => $spe_id_ihs,
-          'servicerequest_idIHS' => $data_api['servicerequest_idIHS'],
-          'lokal_sampleID_testID' => $data_api['lokal_sampleID_testID'],
-          // 'encounter_idIHS' => $enc['idIHS'],
-          // 'acsn' => $data_api['acsn'] ?? null,
-          'method_code' => $data_api['method_code'] ?? null,
-          'method_display' => $data_api['method_display'] ?? null,
-          'code' => $data_api['code'] ?? null,
-          'display' => $data_api['display'] ?? null,
-          'rm' => $rm,
-          'dok' => $data_api['dok'] ?? null,
-          // 'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
-          'laborat_ihs' => $payload['petugaslab_idIHS'],
-          'laborat_nama' => $payload['petugaslab_nama'],
-          // 'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
-          'date' => $data_api['date'],
-          // 'status' => 'active',
-          'created_at' => $now,
-          'updated_at' => $now,
+      try {
+        //code...
+        // $dbLocalSpeciment->createCommand()->update(
+        $dbLocalSpeciment->createCommand()->insert(
+          'ssht_speciment',
+          [
+            'speciment_idIHS' => $spe_id_ihs,
+            'servicerequest_idIHS' => $data_api['servicerequest_idIHS'],
+            'lokal_sampleID_testID' => $data_api['lokal_sampleID_testID'],
+            // 'encounter_idIHS' => $enc['idIHS'],
+            // 'acsn' => $data_api['acsn'] ?? null,
+            'method_code' => $data_api['method_code'] ?? null,
+            'method_display' => $data_api['method_display'] ?? null,
+            'code' => $data_api['code'] ?? null,
+            'display' => $data_api['display'] ?? null,
+            'rm' => $rm,
+            'dok' => $data_api['dok'] ?? null,
+            // 'patient_idIHS' => $data_api['patient_idIHS'] ?? null,
+            'laborat_ihs' => $payload['petugaslab_idIHS'],
+            'laborat_nama' => $payload['petugaslab_nama'],
+            // 'dokter_request_idIHS' => $data_api['dokter_request_idIHS'] ?? null,
+            'date' => $data_api['date'],
+            // 'status' => 'active',
+            'created_at' => $now,
+            'updated_at' => $now,
 
-          // 'payload' => json_encode($payload),
-          // 'send_status' => 'S',
-        ]
-        // ],
-        // [
-        //   'id' => $idSpec
-        // ]
-      )->execute();
-      $this->stdout("[+] Sukses Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$rm}, Speciment_idIHS: {$spe_id_ihs} \n");
+            // 'payload' => json_encode($payload),
+            // 'send_status' => 'S',
+          ]
+          // ],
+          // [
+          //   'id' => $idSpec
+          // ]
+        )->execute();
+        $this->stdout("[+] Sukses Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$rm}, Speciment_idIHS: {$spe_id_ihs} \n");
+      } catch (\Throwable $e) {
+
+        $this->stdout("[+] Gagal Save Duplicate Speciment, Rm: {$rm}, lokal_sampleID_testID: {$payloadSpeciment['sampleID']} \n");
+        continue;
+      }
     } else {
       // $now = date('Y-m-d H:i:s');
       // $dbLocalSpeciment->createCommand()->update(
@@ -1118,6 +1208,7 @@ class SshtApiClientController extends Controller
       //   ]
       // )->execute();
       $this->stdout("[-] Failed Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$enc['rm']} \n");
+      continue;
     }
   }
 
