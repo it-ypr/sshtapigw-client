@@ -1058,8 +1058,8 @@ class SshtApiClientController extends Controller
         'ssr.encounter_idIHS',
         'ssr.category_code',
         'ssr.category_display',
-        'ssr.code',
-        'ssr.display',
+        'ssr.code as sr_code',
+        'ssr.display as sr_display',
         'ssr.perihal',
         'ssr.rm',
         'ssr.patient_idIHS',
@@ -1075,8 +1075,8 @@ class SshtApiClientController extends Controller
         'ssp.lokal_sampleID_testID',
         'ssp.method_code',
         'ssp.method_display',
-        'ssp.code',
-        'ssp.display',
+        'ssp.code as sp_code',
+        'ssp.display as sp_display',
       ])
       ->from('ssht_servicerequest ssr')
       ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
@@ -1092,10 +1092,153 @@ class SshtApiClientController extends Controller
       return;
     }
 
-    foreach ($serviceRequestLab as $lab) {
-      $rm = $lab['rm'];
+    foreach ($serviceRequestLab as $srlab) {
+      $srrm = $srlab['rm'];
 
-      // SshtApiQueryMapping::getObservationLabLocalRalan($tgl_param, $rm, $loinc_order);
+      $obsLabs = SshtApiQueryMapping::getObservationLabLocalRalan(
+        $tgl_param,
+        $srrm,
+        $srlab["sr_code"]
+      );
+
+      if (!$obsLabs) {
+        $this->stdout("[!] Skip: tydac ditemukan data Hasil Observasi lab Rm: {$srrm} ,tanggal {$tgl_param}\n");
+        continue;
+      }
+
+      foreach ($obsLabs as $obsLab) {
+        // 1. cek $obsLab loinc dengan param di loinc_lab (mengkasifikasi tipe isian berdasarkan jenis panel pemeriksaan)
+        $labloinc = (new Query())
+          ->select([
+            'code',
+            'display',
+            'tipe_hasil_pemeriksaan',
+            'scale',
+            'unit_of_measure',
+            'code_system'
+          ])
+          ->from('loinc_lab')
+          ->where(['code' => $obsLab["loinc"]])
+          ->one(\Yii::$app->dbsshtterminologi);
+
+        if (empty($labloinc)) {
+          $this->stdout("[!] Skip: tydac ditemukan kode loinc untuk data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
+          continue;
+        }
+
+        // 2. Payload Observation Lab bentukan disesuaikan tipe panel
+        // ["Quantitative(Qn)", "Nominal(Nom)", "Ordinal(Ord)", "Narative(Nar)"]
+        // sementara pake Quantitative sek untuk darah rutin kedepan kalau rampung mapping 
+        // pake all type..
+        $payloadObs = [
+          "speciment_idIHS" => "required|uuid",
+          "sampelID_TestID" => "required|alpha_dash",
+          "rm" => "required|alpha_dash",
+          "laborat" => "required|alpha_dash",
+          // // data-init
+          // // panel-type
+          "scale" => $labloinc["scale"] == '-'
+            ? $labloinc["tipe_hasil_pemeriksaan"]
+            : $labloinc["scale"],
+          // // observation
+          "code-obs" => $labloinc["code"],
+          "code-display" => $labloinc["display"],
+          // // referenceRange skala untuk kondisi normal
+          // "referenceRange" => str_contains($obsLab["ANGKA_NORMAL"], '-') && explode("-", $obsLab["ANGKA_NORMAL"])
+          //   ? explode("-", $obsLab["ANGKA_NORMAL"])
+          //   : '',
+          "referenceRange" => (
+            ($range = array_map('trim', explode('-', $obsLab["ANGKA_NORMAL"], 2))) &&
+            isset($range[1], $range[0]) &&
+            $range[0] !== '' &&
+            $range[1] !== ''
+          )
+            ? $range
+            : $obsLab["ANGKA_NORMAL"],
+          "unit-referenceRange" => $labloinc["unit_of_measure"],
+          // // codeableConcept (Ordinal & Nominal)
+          // "code-codeableConcept" => "sometimes|alpha_dash",
+          // "display-codeableConcept" => "sometimes|string",
+          // // valueQuantity (Quantitative)
+          "valueQuantity" => $obsLab["RESULT_VALUE"],
+          "unit-valueQuantity" => $labloinc["unit_of_measure"],
+          // // valueString (Narative)
+          // "valueString" => "sometimes|string",
+          // // interpretation (Quantitative) tapi saat ini di disable dulu aja belum ada source truth baku
+          // "code-interpretation" => "sometimes|alpha_dash",
+          // "display-interpretation" => "sometimes|string",
+          // "interpretation" => "sometimes|string",
+        ];
+        // 3. Check Observation local db
+        $checkObsLokal = (new Query())
+          ->select(['sso.*'])
+          ->from('ssht_observation sso')
+          ->where(['sso.servicerequest_idIHS' => $srlab["servicerequest_idIHS"]])
+          ->andWhere(['sso.speciment_idIHS' => $srlab["speciment_idIHS"]])
+          ->andWhere(['rm' => $rm])
+          ->andWhere(['status' => 'active'])
+          ->andWhere(['obs_code' => $payloadObs["code-obs"]])
+          ->exists($dbLocal);
+
+        if (!$checkObsLokal) {
+          $this->stdout("[!] Skip: duplicate data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
+          continue;
+        }
+        // 4. Send Observation Lab
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
+          payload: $payload,
+        )) {
+          continue;
+        }
+
+        // // 3. Kirim via Wrapper
+        $response = SshtApiBase::request(
+          SshtApiUrl::OBSERVATION_CREATE_LAB,
+          ['json' => $payloadObs]
+        );
+
+        $result = json_decode((string) $response->getBody(), true);
+        print_r(json_encode($result));
+
+        // 5. if sucess send save to local
+        if (isset($result['status']) && ($result['status'] == 'true')) {
+          $data_api = $result['data'] ?? [];
+
+          $dbLocal->createCommand()->insert('ssht_observation', [
+            'observation_idIHS' => $data_api['observation_idIHS'],
+            'encounter_idIHS' => $data_api['encounter_idIHS'],
+            'subject_idIHS' => $data_api['subject_idIHS'],
+            'obs_code' => $data_api['obs_code'],
+            'obs_display' => $data_api['obs_display'],
+            'obs_valueString' => $data_api['obs_valueString'],
+            'date' => $data_api['date'],
+            'rm' => $srrm,
+            'status' => $data_api['status'],
+            'created_at' => date('Y-m-d H:i:s'),
+            'obs_system' => $data_api['obs_system'],
+            'category_system' => $data_api['category_system'],
+            'category_code' => $data_api['category_code'],
+            'category_display' => $data_api['category_display'],
+
+            'speciment_idIHS' => $data_api['speciment_idIHS'],
+            "servicerequest_idIHS" => $data_api['servicerequest_idIHS'],
+            'obs_value' => $data_api['obs_value'] ?? "",
+            "codeable_value" => $data_api['codeable_value'] ?? "",
+            "codeable_display" => $data_api['codeable_display'] ?? "",
+            'intr_code' => $data_api['intr_code'] ?? "",
+            'intr_display' => $data_api['intr_display'] ?? "",
+            'date' => $data_api['date'],
+            'performer' => $data_api['performer'],
+          ])->execute();
+
+          $this->stdout("  [OK] Observation Saved: {$row['rm']}\n");
+          // 6. else gagal send
+        } else {
+          $this->stdout("  [Failed] data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n\n");
+          continue;
+        }
+      }
     }
   }
 

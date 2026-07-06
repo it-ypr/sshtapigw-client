@@ -252,7 +252,41 @@ class SshtApiUrl
   // public const OBSERVATION_UPDATE_KESADARAN = "ssht/observation/kesadaran/update";
   // public const OBSERVATION_UPDATE_RMNDOK = "ssht/observation/get-rmndok";
 
-  public const OBSERVATION_CREATE_LAB = "ssht/observation/lab/create";
+  /**
+   * Create Observation Laboratory.
+   *
+   * Method: POST
+   * URL: api/v1/ssht/observation/lab/create
+   * Body JSON:
+   * {
+   *    "speciment_idIHS": "string|uuid (required) - id specimen SATUSEHAT",
+   *    "sampelID_TestID": "string|alpha_dash (required) - identifier sampel dan test",
+   *    "rm": "string|alpha_dash (required) - nomor rekam medis",
+   *    "laborat": "string|alpha_dash (required) - kode laboratorium",
+   *
+   *    "scale": "string|alpha (required) - skala hasil observasi (quantitative | ordinal | nominal | narrative)",
+   *
+   *    "code-obs": "string|alpha_dash (required) - kode LOINC observasi laboratorium",
+   *    "code-display": "string (required) - nama/display observasi laboratorium",
+   *
+   *    "referenceRange": "array (optional) - rentang nilai normal, contoh: [3.5, 5.5]",
+   *    "referenceRange.*": "numeric|min:0|max:500 (optional) - nilai minimum dan maksimum rentang normal",
+   *    "unit-referenceRange": "string (optional) - satuan reference range",
+   *
+   *    "code-codeableConcept": "string|alpha_dash (optional) - kode hasil observasi (CodeableConcept)",
+   *    "display-codeableConcept": "string (optional) - display hasil observasi (CodeableConcept)",
+   *
+   *    "valueQuantity": "string (optional) - nilai hasil observasi numerik",
+   *    "unit-valueQuantity": "string (optional) - satuan valueQuantity",
+   *
+   *    "valueString": "string (optional) - nilai hasil observasi dalam bentuk teks",
+   *
+   *    "code-interpretation": "string|alpha_dash (optional) - kode interpretasi hasil",
+   *    "display-interpretation": "string (optional) - display interpretasi hasil",
+   *    "interpretation": "string (optional) - interpretasi hasil pemeriksaan"
+   * }
+   */
+  public const OBSERVATION_CREATE_LAB = ["POST", "ssht/observation/lab/create"];
   // public const OBSERVATION_UPDATE_LAB = "ssht/observation/lab/update";
 
   /**
