@@ -259,6 +259,7 @@ class SshtApiUrl
    * URL: api/v1/ssht/observation/lab/create
    * Body JSON:
    * {
+   *    "servicerequest_idIHS": "string|uuid (required) - id serviceRequest SATUSEHAT",
    *    "speciment_idIHS": "string|uuid (required) - id specimen SATUSEHAT",
    *    "sampelID_TestID": "string|alpha_dash (required) - identifier sampel dan test",
    *    "rm": "string|alpha_dash (required) - nomor rekam medis",

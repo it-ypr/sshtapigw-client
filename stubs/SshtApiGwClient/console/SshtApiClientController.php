@@ -1038,6 +1038,9 @@ class SshtApiClientController extends Controller
     }
   }
 
+  /**
+   * Run Cron: php yii ssht-api-client/send-observation-lab-ralan-single 2026-05-01 rm
+   */
   public function actionSendObservationLabRalanSingle(
     string $tgl_param,
     string $rm
@@ -1068,7 +1071,8 @@ class SshtApiClientController extends Controller
         'ssr.petugas_idIHS',
         'ssr.petugas_nama',
         'ssr.date',
-        'ssr.class',
+        // 'ssr.class',
+        'ssr.status',
         'ssr.srid',
         'ssp.speciment_idIHS',
         'ssp.lokal_sampleID_testID',
@@ -1081,10 +1085,10 @@ class SshtApiClientController extends Controller
       ->from('ssht_servicerequest ssr')
       ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
       ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
-      ->andWhere(['rm' => $rm])
-      ->andWhere(['status' => 'active'])
-      ->andWhere(['category_code' => '108252007'])
-      ->andWhere(['category_display' => 'Laboratory procedure'])
+      ->andWhere(['ssr.rm' => $rm])
+      ->andWhere(['ssr.status' => 'active'])
+      ->andWhere(['ssr.category_code' => '108252007'])
+      ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
       ->all($dbLocal);
 
     if (empty($serviceRequestLab)) {
@@ -1131,10 +1135,11 @@ class SshtApiClientController extends Controller
         // sementara pake Quantitative sek untuk darah rutin kedepan kalau rampung mapping 
         // pake all type..
         $payloadObs = [
-          "speciment_idIHS" => "required|uuid",
-          "sampelID_TestID" => "required|alpha_dash",
-          "rm" => "required|alpha_dash",
-          "laborat" => "required|alpha_dash",
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          "sampelID_TestID" => $obsLab["SAMPEL_ID"] . '-' . $obsLab["TEST_ID"],
+          "rm" => $srrm,
+          "laborat" => $srlab["petugas_idIHS"],
           // // data-init
           // // panel-type
           "scale" => $labloinc["scale"] == '-'
@@ -1173,21 +1178,30 @@ class SshtApiClientController extends Controller
         $checkObsLokal = (new Query())
           ->select(['sso.*'])
           ->from('ssht_observation sso')
-          ->where(['sso.servicerequest_idIHS' => $srlab["servicerequest_idIHS"]])
-          ->andWhere(['sso.speciment_idIHS' => $srlab["speciment_idIHS"]])
-          ->andWhere(['rm' => $rm])
-          ->andWhere(['status' => 'active'])
-          ->andWhere(['obs_code' => $payloadObs["code-obs"]])
+          ->where([
+            'sso.encounter_idIHS' => $srlab["encounter_idIHS"],
+            'rm' => $rm,
+            'status' => 'active',
+            'obs_code' => $payloadObs["code-obs"],
+          ])
+          // ->andWhere(['sso.servicerequest_idIHS' => $srlab["servicerequest_idIHS"]])
+          // ->andWhere(['sso.speciment_idIHS' => $srlab["speciment_idIHS"]])
+          //
+          // ->andWhere(['rm' => $rm])
+          // ->andWhere(['status' => 'active'])
+          // ->andWhere(['obs_code' => $payloadObs["code-obs"]])
+          // ->one($dbLocal);
           ->exists($dbLocal);
 
-        if (!$checkObsLokal) {
+        if ($checkObsLokal) {
           $this->stdout("[!] Skip: duplicate data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
+          // $this->stdout("{json_encode($checkObsLokal)}");
           continue;
         }
         // 4. Send Observation Lab
         if (!$debugger->allow(
           context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
-          payload: $payload,
+          payload: $payloadObs,
         )) {
           continue;
         }
@@ -1201,7 +1215,7 @@ class SshtApiClientController extends Controller
         $result = json_decode((string) $response->getBody(), true);
         print_r(json_encode($result));
 
-        // 5. if sucess send save to local
+        // // 5. if sucess send save to local
         if (isset($result['status']) && ($result['status'] == 'true')) {
           $data_api = $result['data'] ?? [];
 
@@ -1211,6 +1225,7 @@ class SshtApiClientController extends Controller
             'subject_idIHS' => $data_api['subject_idIHS'],
             'obs_code' => $data_api['obs_code'],
             'obs_display' => $data_api['obs_display'],
+            'obs_value' => $data_api['obs_value'] ?? "",
             'obs_valueString' => $data_api['obs_valueString'],
             'date' => $data_api['date'],
             'rm' => $srrm,
@@ -1221,23 +1236,24 @@ class SshtApiClientController extends Controller
             'category_code' => $data_api['category_code'],
             'category_display' => $data_api['category_display'],
 
-            'speciment_idIHS' => $data_api['speciment_idIHS'],
-            "servicerequest_idIHS" => $data_api['servicerequest_idIHS'],
-            'obs_value' => $data_api['obs_value'] ?? "",
+            // 2026-07-07 08:14 - disable baseOn itu dinamis tidak bisa di set static
+            // 'speciment_idIHS' => $data_api['speciment_idIHS'],
+            // "servicerequest_idIHS" => $data_api['servicerequest_idIHS'],
             "codeable_value" => $data_api['codeable_value'] ?? "",
             "codeable_display" => $data_api['codeable_display'] ?? "",
             'intr_code' => $data_api['intr_code'] ?? "",
             'intr_display' => $data_api['intr_display'] ?? "",
             'date' => $data_api['date'],
-            'performer' => $data_api['performer'],
+            'performer_idIHS' => $data_api['performer'],
           ])->execute();
 
-          $this->stdout("  [OK] Observation Saved: {$row['rm']}\n");
+          $this->stdout("  [OK] Observation Lab Saved: {$data_api['observation_idIHS']} ,from serviceRequest: {$payloadObs['servicerequest_idIHS']}, RM: {$srrm}\n");
           // 6. else gagal send
         } else {
-          $this->stdout("  [Failed] data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n\n");
+          $this->stdout("  [Failed] data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,from serviceRequest: {$payloadObs['servicerequest_idIHS']} ,Rm: {$srrm} , tanggal {$tgl_param}\n\n");
           continue;
         }
+        // end foreach obslab
       }
     }
   }
