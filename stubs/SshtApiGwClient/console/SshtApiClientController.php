@@ -1258,6 +1258,119 @@ class SshtApiClientController extends Controller
     }
   }
 
+  public function actionSendDiagnosticReportLabSingle(string $tgl_param, string $rm)
+  {
+    $class = 'AMB';
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $serviceRequestLab = (new Query())
+      ->select([
+        'ssr.servicerequest_idIHS',
+        'ssr.encounter_idIHS',
+        'ssr.category_code',
+        'ssr.category_display',
+        'ssr.code as sr_code',
+        'ssr.display as sr_display',
+        'ssr.perihal',
+        'ssr.rm',
+        'ssr.patient_idIHS',
+        'ssr.dok',
+        'ssr.dokter_request_idIHS',
+        'ssr.petugas_idIHS',
+        'ssr.petugas_nama',
+        'ssr.date',
+        // 'ssr.class',
+        'ssr.status',
+        'ssr.srid',
+        'ssp.speciment_idIHS',
+        'ssp.lokal_sampleID_testID',
+        'ssp.lokal_sampleID_testID',
+        'ssp.method_code',
+        'ssp.method_display',
+        'ssp.code as sp_code',
+        'ssp.display as sp_display',
+      ])
+      ->from('ssht_servicerequest ssr')
+      ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
+      ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
+      ->andWhere(['ssr.rm' => $rm])
+      ->andWhere(['ssr.status' => 'active'])
+      ->andWhere(['ssr.category_code' => '108252007'])
+      ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
+      ->groupBy(['ssr.servicerequest_idIHS'])
+      ->all($dbLocal);
+
+    if (empty($serviceRequestLab)) {
+      $this->stdout("[!] Tydac ada data order serviceRequestLab tanggal {$tgl_param}\n");
+      return;
+    }
+
+    foreach ($serviceRequestLab as $srlab) {
+
+      $checkDr = (new Query())
+        ->from('ssht_diagnosticreport')
+        ->where(['rm' => $srlab['rm']])
+        ->andWhere(['like', 'date', $tgl_param])
+        ->andWhere(['category_code' => 'RAD'])
+        ->exists($dbLocal);
+
+      if (!$checkDr) {
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD),
+          payload: [
+            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+            "value" => "-",
+            "speciment_idIHS" => $srlab["speciment_idIHS"],
+            "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+          ],
+        )) {
+          continue;
+        }
+
+        $resR = SshtApiBase::request(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD, [
+          'json' => [
+            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+            "value" => "-",
+            "speciment_idIHS" => $srlab["speciment_idIHS"],
+            "sampelID_testID" => "" // atau pake srid?
+          ]
+        ]);
+
+        if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
+          $resRReq = json_decode((string) $resR->getBody(), true);
+          print_r($resRReq);
+          $resDataR = $resRReq['data'] ?? [];
+          $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
+            'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
+            'encounter_idIHS' => $resDataR['encounter_idIHS'],
+            'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
+            'subject_idIHS' => $resDataR['subject_idIHS'],
+            'rm' => $srlab['rm'],
+            'date' => $resDataR['date'],
+            'status' => $resDataR['status'],
+            'created_at' => date('Y-m-d H:i:s'),
+            'category_system' => $resDataR['category_system'],
+            'category_display' => $resDataR['category_display'],
+            'category_code' => $resDataR['category_code'],
+          ])->execute();
+          $this->stdout("  [OK] Report Saved: {$srlab['rm']}\n");
+        } else {
+          $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
+        }
+      } else {
+        $this->stdout("  [SKIP] Report RM {$srlab['rm']} sudah ada.\n");
+      }
+    }
+  }
+
   private function sendSpecimentRalanSingle(
     $rm,
     $enc,
