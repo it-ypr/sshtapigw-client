@@ -428,6 +428,20 @@ class SshtApiUrl
   public const DIAGNOSTIC_REPORT_GET = "";
   public const DIAGNOSTIC_REPORT_CREATE = "";
 
+  /**
+   * Create DiagnosticReport Lab.
+   *
+   * Method: POST 
+   * URL: api/v1/ssht/diagnostic-report/lab/create
+   * Body JSON:
+   * {
+   *    "servicerequest_idIHS": "string|uuid4 (required) - (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')",
+   *    "speciment_idIHS": "string|uuid4 (required) - (Example: 'd99eb2ec-889e-80d6-9976-4e0113c5401b')",
+   *    "value": "string (required) - text expertise dokter radio (kesan)",
+   *    "srid": "string|numeric (required) - srid"
+   * }
+   */
+  public const DIAGNOSTIC_REPORT_CREATE_LAB = ['POST', 'ssht/diagnostic-report/lab/create'];
 
   // "servicerequest_idIHS" => "required|string|uuid",
   // "value" => "required|string",

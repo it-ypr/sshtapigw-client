@@ -1258,7 +1258,10 @@ class SshtApiClientController extends Controller
     }
   }
 
-  public function actionSendDiagnosticReportLabSingle(string $tgl_param, string $rm)
+  /**
+   * Run: php yii ssht-api-client/send-diagnostic-report-lab-ralan-single 2025-09-29 rm
+   */
+  public function actionSendDiagnosticReportLabRalanSingle(string $tgl_param, string $rm)
   {
     $class = 'AMB';
 
@@ -1291,7 +1294,6 @@ class SshtApiClientController extends Controller
         'ssr.srid',
         'ssp.speciment_idIHS',
         'ssp.lokal_sampleID_testID',
-        'ssp.lokal_sampleID_testID',
         'ssp.method_code',
         'ssp.method_display',
         'ssp.code as sp_code',
@@ -1304,7 +1306,7 @@ class SshtApiClientController extends Controller
       ->andWhere(['ssr.status' => 'active'])
       ->andWhere(['ssr.category_code' => '108252007'])
       ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
-      ->groupBy(['ssr.servicerequest_idIHS'])
+      // ->groupBy(['ssr.servicerequest_idIHS'])
       ->all($dbLocal);
 
     if (empty($serviceRequestLab)) {
@@ -1318,55 +1320,63 @@ class SshtApiClientController extends Controller
         ->from('ssht_diagnosticreport')
         ->where(['rm' => $srlab['rm']])
         ->andWhere(['like', 'date', $tgl_param])
-        ->andWhere(['category_code' => 'RAD'])
+        ->andWhere(['servicerequest_idIHS' => $srlab['servicerequest_idIHS']])
+        ->andWhere(['category_code' => 'LAB'])
         ->exists($dbLocal);
 
-      if (!$checkDr) {
+      if ($checkDr) {
+        $this->stdout("[!] Skip: DiagnosticReport sudah ada untuk serviceRequestLab: {$srlab['servicerequest_idIHS']}, RM: {$srlab['rm']} , tanggal {$tgl_param}\n");
+        continue;
+      }
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD),
-          payload: [
-            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
-            "value" => "-",
-            "speciment_idIHS" => $srlab["speciment_idIHS"],
-            "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
-          ],
-        )) {
-          continue;
-        }
+      if (!$debugger->allow(
+        context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
+        payload: [
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "value" => "-",
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+          "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+        ],
+      )) {
+        continue;
+      }
 
-        $resR = SshtApiBase::request(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD, [
-          'json' => [
-            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
-            "value" => "-",
-            "speciment_idIHS" => $srlab["speciment_idIHS"],
-            "sampelID_testID" => "" // atau pake srid?
-          ]
-        ]);
+      $resR = SshtApiBase::request(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB, [
+        'json' => [
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "value" => "-",
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          // "sampelID_testID" => "" // atau pake srid?
+          "srid" => $srlab["srid"] // atau pake srid?
+        ]
+      ]);
 
-        if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
-          $resRReq = json_decode((string) $resR->getBody(), true);
-          print_r($resRReq);
-          $resDataR = $resRReq['data'] ?? [];
-          $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
-            'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
-            'encounter_idIHS' => $resDataR['encounter_idIHS'],
-            'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
-            'subject_idIHS' => $resDataR['subject_idIHS'],
-            'rm' => $srlab['rm'],
-            'date' => $resDataR['date'],
-            'status' => $resDataR['status'],
-            'created_at' => date('Y-m-d H:i:s'),
-            'category_system' => $resDataR['category_system'],
-            'category_display' => $resDataR['category_display'],
-            'category_code' => $resDataR['category_code'],
-          ])->execute();
-          $this->stdout("  [OK] Report Saved: {$srlab['rm']}\n");
-        } else {
-          $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
-        }
+      // $resRReq = json_decode((string) $resR->getBody(), true);
+      // print_r($resRReq);
+      // print_r(json_encode($resRReq));
+
+      if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
+        $resRReq = json_decode((string) $resR->getBody(), true);
+        print_r($resRReq);
+        print_r(json_encode($resRReq));
+        $resDataR = $resRReq['data'] ?? [];
+        $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
+          'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
+          'encounter_idIHS' => $resDataR['encounter_idIHS'],
+          'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
+          'subject_idIHS' => $resDataR['subject_idIHS'],
+          'rm' => $srlab['rm'],
+          'date' => $resDataR['date'],
+          'status' => $resDataR['status'],
+          'created_at' => date('Y-m-d H:i:s'),
+          'category_system' => $resDataR['category_system'],
+          'category_display' => $resDataR['category_display'],
+          'category_code' => $resDataR['category_code'],
+        ])->execute();
+        $this->stdout("  [OK] Report Saved: {$srlab['rm']}\n");
       } else {
-        $this->stdout("  [SKIP] Report RM {$srlab['rm']} sudah ada.\n");
+        $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
       }
     }
   }
