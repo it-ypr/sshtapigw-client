@@ -42,7 +42,11 @@ class SshtApiClientController extends Controller
     // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
     // Lab - ServiceRequest & Speciment
     $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
-    // Lab - Observation & DiagnosticReport (inprogress)
+    // Lab - Observation & DiagnosticReport (on-testing)
+    // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
+    // $this->actionSendObservationLabRalan($tgl_param); 
+    // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
+    // $this->actionSendDiagnosticReportLabRalan($tgl_param);
     // EncounterFinish (inprogress)
   }
 
@@ -399,7 +403,9 @@ class SshtApiClientController extends Controller
               \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
                 'condition_idIHS' => $conditionIhsId,
                 'encounter_idIHS' => $encounterIhsId,
-                'conditionRank'   => ($key == 0) ? 1 : 2,
+                // 'conditionRank'   => ($key == 0) ? 1 : 2, // salah karena nanti 1,2,2,2...
+                // index mulai dari 1,2,3,4...
+                'conditionRank'   => ($key + 1),
                 'code'            => $icd['code'],
                 'display'         => $icd['display'],
                 'rm'              => $row['rm'],
@@ -568,7 +574,9 @@ class SshtApiClientController extends Controller
               \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
                 'condition_idIHS' => $conditionIhsId,
                 'encounter_idIHS' => $encounterIhsId,
-                'conditionRank'   => ($key == 0) ? 1 : 2,
+                // 'conditionRank'   => ($key == 0) ? 1 : 2, // salah karena nanti 1,2,2,2...
+                // index mulai dari 1,2,3,4...
+                'conditionRank'   => ($key + 1),
                 'code'            => $icd['code'],
                 'display'         => $icd['display'],
                 'rm'              => $row['rm'],
@@ -601,6 +609,485 @@ class SshtApiClientController extends Controller
   public function actionSendEncounterRanap($tgl_param)
   {
     echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
+    echo "\n--- TASK BOT DONE ---\n";
+  }
+
+
+  /**
+   * Run: php yii ssht-api-client/send-encounter-finish-ralan-single 2026-05-01 rm
+   */
+  public function actionSendEncounterFinishRalanSingle($tgl_param, $rm_param)
+  {
+    $classEnc = 'AMB';
+    $dbLocal = Yii::$app->sshtAPIdb;
+    $config = SshtApiBase::getConfig();
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+    echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
+    $encounter = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'subject_nama',
+        'practition_lokalid',
+        'practition_idIHS',
+        'practition_nama',
+        'location_idIHS',
+        'location_nama',
+        'arrived_start',
+        'arrived_end',
+        'inprogress_start',
+        'inprogress_end',
+        'finish_start',
+        'finish_end',
+        'class'
+      ])->from('ssht_encounter')
+      ->where(['like', 'arrived_start', $tgl_param . '%', false])
+      ->andWhere(['subject_rm' => $rm_param])
+      ->andWhere(['class' => 'AMB'])
+      // ->one($dbLocal);
+      ->all($dbLocal);
+
+    foreach ($encounter as $record) {
+      // --- DEBUG & CONFIRMATION ---
+      if (!$debugger->allow(
+        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+        payload: $record['idIHS'],
+      )) {
+        continue;
+      }
+      $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
+      $resEnc = json_decode((string) $resEncReq->getBody(), true);
+      $resEncData = isset($resEnc['data']) ? $resEnc['data'] : [];
+      $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+
+      echo "\nData Encounter Get: \n";
+      print_r($resEnc);
+
+      // if (!$debugger->allow(
+      //   context: ['method' => 'Updated Class Encounter di local?'],
+      //   payload: $encounterIhsId,
+      // )) {
+      //   continue;
+      // }
+      //
+      // sleep(1);
+
+      if ($resEncReq->getStatusCode() == 200 && $resEnc['status'] == 'true') {
+        // $payload = [
+        //   'idIHS' => $resEncData['idIHS'],
+        //   'arrived_start' => $resEncData['arrived_start'],
+        //   'arrived_end' => $resEncData['arrived_end'],
+        //   'inprogress_start' => $resEncData['inprogress_start'],
+        //   'inprogress_end' => $resEncData['inprogress_end'],
+        //   'finish_start' => $resEncData['finish_start'],
+        //   'finish_end' => $resEncData['finish_end'],
+        //   'class' => $resEncData['class']
+        // ];
+        //
+        // $dbLocal->createCommand()->update('ssht_encounter', $payload, ['idIHS' => $encounterIhsId])->execute();
+
+        // $getconditionsSimrs = SshtApiQueryMapping::queryConditionSimrs(
+        //   tgl_param: $tgl_param,
+        //   rm: $record['subject_rm'],
+        //   dok: $record['practition_lokalid'],
+        //   poli_idihs: $record['location_idIHS']
+        // );
+
+        $dbSimrs = Yii::$app->db;
+
+        try {
+
+          $getconditionsSimrs = (new Query())
+            ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+            ->from('mr_kunjungan k')
+            ->leftJoin('mpoli', 'k.poli = mpoli.poli')
+            ->where([
+              'k.rm' => $record['subject_rm'],
+              'k.dokter' => $record['practition_lokalid'],
+              'k.tanggal' => $tgl_param,
+              'mpoli.idihs' => $record['location_idIHS'],
+            ])
+            ->orderBy("Id ASC")
+            ->all($dbSimrs);
+
+          $getConditionLocal = (new Query())
+            ->select([
+              'condition_idIHS',
+              'encounter_idIHS',
+              'code',
+              'display',
+              'conditionRank'
+            ])->from('ssht_condition')
+            ->where(['encounter_idIHS' => $encounterIhsId])
+            ->all($dbLocal);
+
+          // // --- DEBUG & CONFIRMATION ---
+          // if (!$debugger->allow(
+          //   context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET_BY_ENCOUNTER),
+          //   payload: $record['idIHS'],
+          // )) {
+          //   continue;
+          // }
+
+          // 1. Ambil urutan ICD dari SIMRS sebagai acuan utama
+          // Kita bersihkan karakter non-alphanumeric agar 'I24.9' dan 'I249' tetap cocok
+          $simrsOrder = [];
+          foreach ($getconditionsSimrs as $index => $row) {
+            $cleanIcd = preg_replace('/[^A-Za-z0-9]/', '', $row['icd']);
+            $simrsOrder[$cleanIcd] = $index + 1; // Rank dimulai dari 1
+          }
+
+          // 2. Map data lokal berdasarkan acuan di atas
+          $diagnosis = array_map(function ($localItem) use ($simrsOrder) {
+            $cleanLocalCode = preg_replace('/[^A-Za-z0-9]/', '', $localItem['code']);
+
+            // Cari rank berdasarkan urutan di SIMRS
+            $rank = isset($simrsOrder[$cleanLocalCode]) ?? $simrsOrder[$cleanLocalCode];
+
+            return [
+              'condition_idIHS' => $localItem['condition_idIHS'],
+              'code'            => $localItem['code'],
+              'display'         => $localItem['display'],
+              'conditionRank'   => (string) $rank,
+            ];
+          }, $getConditionLocal);
+
+          // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
+          usort($diagnosis, function ($a, $b) {
+            return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
+          });
+
+          print_r("diagnosis data sort: \n");
+          print_r($diagnosis);
+          // exit;
+
+          // start foreach update conditionRank di ssh_condition..
+          foreach ($diagnosis as $diag) {
+
+            // --- DEBUG & CONFIRMATION ---
+            echo "\nSort conditionRank di table local ssht_condition? [Enter/y]=continue, s=skip, q=quit > \n";
+            if (!$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET),
+              payload: $diag,
+            )) {
+              continue;
+            }
+
+            $current = array_filter(
+              $getConditionLocal,
+              fn($item) => $item['condition_idIHS'] == $diag['condition_idIHS']
+            );
+
+            $current = reset($current);
+
+            if (
+              empty($current['conditionRank']) ||
+              (string)$current['conditionRank'] !== (string)$diag['conditionRank']
+            ) {
+
+              // update rank condition
+              \Yii::$app->sshtAPIdb->createCommand()->update(
+                'ssht_condition',
+                [
+                  'conditionRank'   => (string) $diag['conditionRank'],
+                ],
+                [
+                  'condition_idIHS' => $diag['condition_idIHS']
+                ]
+              )->execute();
+            }
+            //end foreach update sort conditionRank on ssht_condition
+          }
+
+          $payloadEncounterFinish = [
+            'encounter_idIHS' => $encounterIhsId,
+            'rm' => $record['subject_rm'],
+            'patient_idIHS' => $record['subject_idIHS'],
+            'patient_nama' => $record['subject_nama'],
+
+            'practition_idIHS' => $record['practition_idIHS'],
+            'practition_nama' => $record['practition_nama'],
+
+            'location_idIHS' => $record['location_idIHS'],
+            'location_nama' => $record['location_nama'],
+
+            'diagnosis' => $diagnosis,
+
+            'arrived_start' => $record['arrived_start'],
+            'arrived_end' => $record['arrived_end'],
+
+            'inprogress_start' => $record['inprogress_start'],
+            'inprogress_end' => $record['inprogress_end'],
+
+            'finish_start' => $record['finish_start'] ?? $record['inprogress_end'],
+            'finish_end' => $record['finish_end'] ?? $record['inprogress_end'],
+
+            'class' => $resEncData['class'],
+          ];
+
+          print_r($payloadEncounterFinish);
+
+          // --- DEBUG & CONFIRMATION ---
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
+            payload: $payloadEncounterFinish,
+          )) {
+            continue;
+          }
+
+          $encounterFinish = SshtApiBase::request(SshtApiUrl::ENCOUNTER_FINISH, ['json' => $payloadEncounterFinish]);
+          // test
+          $resEnc = json_decode((string) $resEncReq->getBody(), true);
+          print_r("Response Form body");
+          print_r($resEnc);
+          exit;
+          // test
+
+          if ($encounterFinish->getStatusCode() == 200 || $encounterFinish->getStatusCode() == 201) {
+            $resEnc = json_decode((string) $resEncReq->getBody(), true);
+            $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+
+            echo " SUCCESS ENCOUNTER: $encounterIhsId\n";
+            // Ambil data hasil wrap gateway
+            $encData = $resEnc['data'];
+
+            // save encounter finish
+            \Yii::$app->sshtAPIdb->createCommand()->update(
+              'ssht_encounter',
+              [
+                'idIHS'          => $encData['idIHS'],
+                'inprogress_end' => $encData['inprogress_end'],
+                'finish_start'   => $encData['finish_start'],
+                'finish_end'     => $encData['finish_end'],
+                'updated_at'     => date('Y-m-d H:i:s'),
+                'class'          => $encData['class'],
+              ],
+              [
+                'idIHS' => $encounterIhsId,
+              ]
+            )->execute();
+
+            // end send encounter finish 
+          } else {
+            echo " FAILED ENCOUNTER";
+            sleep(2);
+          }
+          // end if encounter get
+        } catch (\Exception $e) {
+          echo " ERROR: " . $e->getMessage() . "\n";
+          sleep(5);
+        }
+        // jeda rate limit gateway
+        sleep(2);
+        // end foreach $encounter single
+      }
+      echo "\n--- TASK BOT DONE ---\n";
+      // end actionSendEncounterFinishRalanSingle($tgl_param, $rm_param)
+    }
+  }
+
+  /**
+   * Run:
+   * php yii ssht-api-client/send-encounter-finish-ralan-single-local-rank 2026-05-01 123456
+   *
+   * Menggunakan conditionRank dari tabel ssht_condition.
+   * Tidak membaca ulang diagnosis dari SIMRS.
+   */
+  public function actionSendEncounterFinishRalanSingleLocalRank($tgl_param, $rm_param)
+  {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    echo "--- TASK BOT SSHT EncounterFinish (LOCAL RANK) START: {$tgl_param} ---\n";
+
+    $encounters = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'subject_nama',
+        'practition_lokalid',
+        'practition_idIHS',
+        'practition_nama',
+        'location_idIHS',
+        'location_nama',
+        'arrived_start',
+        'arrived_end',
+        'inprogress_start',
+        'inprogress_end',
+        'finish_start',
+        'finish_end',
+        'class'
+      ])
+      ->from('ssht_encounter')
+      ->where(['like', 'arrived_start', $tgl_param . '%', false])
+      ->andWhere(['subject_rm' => $rm_param])
+      ->andWhere(['class' => 'AMB'])
+      ->all($dbLocal);
+
+    foreach ($encounters as $record) {
+
+      if (!$debugger->allow(
+        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+        payload: $record['idIHS']
+      )) {
+        continue;
+      }
+
+      $resEncReq = SshtApiBase::request(
+        SshtApiUrl::ENCOUNTER_GET,
+        [
+          'query' => [
+            'id' => $record['idIHS']
+          ]
+        ]
+      );
+
+      $resEnc = json_decode((string)$resEncReq->getBody(), true);
+
+      print_r($resEnc);
+
+      if (
+        $resEncReq->getStatusCode() != 200 ||
+        ($resEnc['status'] ?? 'false') !== 'true'
+      ) {
+        continue;
+      }
+
+      try {
+
+        $encData = $resEnc['data'];
+        $encounterIhsId = $encData['idIHS'];
+
+        /**
+         * Ambil diagnosis langsung dari ssht_condition
+         * urut berdasarkan conditionRank.
+         */
+        $getConditionLocal = (new Query())
+          ->select([
+            'condition_idIHS',
+            'encounter_idIHS',
+            'code',
+            'display',
+            'conditionRank'
+          ])
+          ->from('ssht_condition')
+          ->where([
+            'encounter_idIHS' => $encounterIhsId
+          ])
+          ->orderBy('CAST(conditionRank AS UNSIGNED) ASC')
+          ->all($dbLocal);
+
+        $diagnosis = array_map(
+          function ($item) {
+
+            return [
+              'condition_idIHS' => $item['condition_idIHS'],
+              'code'            => $item['code'],
+              'display'         => $item['display'],
+              'conditionRank'   => (string)$item['conditionRank'],
+            ];
+          },
+          $getConditionLocal
+        );
+
+        echo "\nDiagnosis (LOCAL RANK):\n";
+        print_r($diagnosis);
+
+        $payloadEncounterFinish = [
+          'encounter_idIHS' => $encounterIhsId,
+
+          'rm' => $record['subject_rm'],
+          'patient_idIHS' => $record['subject_idIHS'],
+          'patient_nama' => $record['subject_nama'],
+
+          'practition_idIHS' => $record['practition_idIHS'],
+          'practition_nama' => $record['practition_nama'],
+
+          'location_idIHS' => $record['location_idIHS'],
+          'location_nama' => $record['location_nama'],
+
+          'diagnosis' => $diagnosis,
+
+          'arrived_start' => $record['arrived_start'],
+          'arrived_end' => $record['arrived_end'],
+
+          'inprogress_start' => $record['inprogress_start'],
+          'inprogress_end' => $record['inprogress_end'],
+
+          'finish_start' => $record['finish_start']
+            ?? $record['inprogress_end'],
+
+          'finish_end' => $record['finish_end']
+            ?? $record['inprogress_end'],
+
+          'class' => $encData['class'],
+        ];
+
+        print_r($payloadEncounterFinish);
+
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_FINISH
+          ),
+          payload: $payloadEncounterFinish
+        )) {
+          continue;
+        }
+
+        $encounterFinish = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_FINISH,
+          [
+            'json' => $payloadEncounterFinish
+          ]
+        );
+
+        $resFinish = json_decode(
+          (string)$encounterFinish->getBody(),
+          true
+        );
+
+        echo "\nResponse Encounter Finish:\n";
+        print_r($resFinish);
+
+        if (
+          $encounterFinish->getStatusCode() == 200 ||
+          $encounterFinish->getStatusCode() == 201
+        ) {
+
+          \Yii::$app->sshtAPIdb->createCommand()->update(
+            'ssht_encounter',
+            [
+              'finish_start' => $resFinish['data']['finish_start'] ?? $record['finish_start'],
+              'finish_end'   => $resFinish['data']['finish_end'] ?? $record['finish_end'],
+              'updated_at'   => date('Y-m-d H:i:s'),
+            ],
+            [
+              'idIHS' => $encounterIhsId
+            ]
+          )->execute();
+
+          echo "SUCCESS ENCOUNTER FINISH: {$encounterIhsId}\n";
+        } else {
+
+          echo "FAILED ENCOUNTER FINISH\n";
+        }
+      } catch (\Throwable $e) {
+
+        echo "ERROR: " . $e->getMessage() . "\n";
+      }
+
+      sleep(2);
+    }
+
     echo "\n--- TASK BOT DONE ---\n";
   }
 
@@ -1259,6 +1746,225 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * Run Cron: php yii ssht-api-client/send-observation-lab-ralan 2026-05-01
+   */
+  public function actionSendObservationLabRalan(
+    string $tgl_param
+  ) {
+    $class = 'AMB';
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $serviceRequestLab = (new Query())
+      ->select([
+        'ssr.servicerequest_idIHS',
+        'ssr.encounter_idIHS',
+        'ssr.category_code',
+        'ssr.category_display',
+        'ssr.code as sr_code',
+        'ssr.display as sr_display',
+        'ssr.perihal',
+        'ssr.rm',
+        'ssr.patient_idIHS',
+        'ssr.dok',
+        'ssr.dokter_request_idIHS',
+        'ssr.petugas_idIHS',
+        'ssr.petugas_nama',
+        'ssr.date',
+        // 'ssr.class',
+        'ssr.status',
+        'ssr.srid',
+        'ssp.speciment_idIHS',
+        'ssp.lokal_sampleID_testID',
+        'ssp.lokal_sampleID_testID',
+        'ssp.method_code',
+        'ssp.method_display',
+        'ssp.code as sp_code',
+        'ssp.display as sp_display',
+      ])
+      ->from('ssht_servicerequest ssr')
+      ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
+      ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
+      // ->andWhere(['ssr.rm' => $rm])
+      ->andWhere(['ssr.status' => 'active'])
+      ->andWhere(['ssr.category_code' => '108252007'])
+      ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
+      ->all($dbLocal);
+
+    if (empty($serviceRequestLab)) {
+      $this->stdout("[!] Tydac ada data order serviceRequestLab tanggal {$tgl_param}\n");
+      return;
+    }
+
+    foreach ($serviceRequestLab as $srlab) {
+      $srrm = $srlab['rm'];
+
+      $obsLabs = SshtApiQueryMapping::getObservationLabLocalRalan(
+        $tgl_param,
+        $srrm,
+        $srlab["sr_code"]
+      );
+
+      if (!$obsLabs) {
+        $this->stdout("[!] Skip: tydac ditemukan data Hasil Observasi lab Rm: {$srrm} ,tanggal {$tgl_param}\n");
+        continue;
+      }
+
+      foreach ($obsLabs as $obsLab) {
+        // 1. cek $obsLab loinc dengan param di loinc_lab (mengkasifikasi tipe isian berdasarkan jenis panel pemeriksaan)
+        $labloinc = (new Query())
+          ->select([
+            'code',
+            'display',
+            'tipe_hasil_pemeriksaan',
+            'scale',
+            'unit_of_measure',
+            'code_system'
+          ])
+          ->from('loinc_lab')
+          ->where(['code' => $obsLab["loinc"]])
+          ->one(\Yii::$app->dbsshtterminologi);
+
+        if (empty($labloinc)) {
+          $this->stdout("[!] Skip: tydac ditemukan kode loinc untuk data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
+          continue;
+        }
+
+        // 2. Payload Observation Lab bentukan disesuaikan tipe panel
+        // ["Quantitative(Qn)", "Nominal(Nom)", "Ordinal(Ord)", "Narative(Nar)"]
+        // sementara pake Quantitative sek untuk darah rutin kedepan kalau rampung mapping 
+        // pake all type..
+        $payloadObs = [
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          "sampelID_TestID" => $obsLab["SAMPEL_ID"] . '-' . $obsLab["TEST_ID"],
+          "rm" => $srrm,
+          "laborat" => $srlab["petugas_idIHS"],
+          // // data-init
+          // // panel-type
+          "scale" => $labloinc["scale"] == '-'
+            ? $labloinc["tipe_hasil_pemeriksaan"]
+            : $labloinc["scale"],
+          // // observation
+          "code-obs" => $labloinc["code"],
+          "code-display" => $labloinc["display"],
+          // // referenceRange skala untuk kondisi normal
+          // "referenceRange" => str_contains($obsLab["ANGKA_NORMAL"], '-') && explode("-", $obsLab["ANGKA_NORMAL"])
+          //   ? explode("-", $obsLab["ANGKA_NORMAL"])
+          //   : '',
+          "referenceRange" => (
+            ($range = array_map('trim', explode('-', $obsLab["ANGKA_NORMAL"], 2))) &&
+            isset($range[1], $range[0]) &&
+            $range[0] !== '' &&
+            $range[1] !== ''
+          )
+            ? $range
+            : $obsLab["ANGKA_NORMAL"],
+          "unit-referenceRange" => $labloinc["unit_of_measure"],
+          // // codeableConcept (Ordinal & Nominal)
+          // "code-codeableConcept" => "sometimes|alpha_dash",
+          // "display-codeableConcept" => "sometimes|string",
+          // // valueQuantity (Quantitative)
+          "valueQuantity" => $obsLab["RESULT_VALUE"],
+          "unit-valueQuantity" => $labloinc["unit_of_measure"],
+          // // valueString (Narative)
+          // "valueString" => "sometimes|string",
+          // // interpretation (Quantitative) tapi saat ini di disable dulu aja belum ada source truth baku
+          // "code-interpretation" => "sometimes|alpha_dash",
+          // "display-interpretation" => "sometimes|string",
+          // "interpretation" => "sometimes|string",
+        ];
+        // 3. Check Observation local db
+        $checkObsLokal = (new Query())
+          ->select(['sso.*'])
+          ->from('ssht_observation sso')
+          ->where([
+            'sso.encounter_idIHS' => $srlab["encounter_idIHS"],
+            'rm' => $rm,
+            'status' => 'active',
+            'obs_code' => $payloadObs["code-obs"],
+          ])
+          // ->andWhere(['sso.servicerequest_idIHS' => $srlab["servicerequest_idIHS"]])
+          // ->andWhere(['sso.speciment_idIHS' => $srlab["speciment_idIHS"]])
+          //
+          // ->andWhere(['rm' => $rm])
+          // ->andWhere(['status' => 'active'])
+          // ->andWhere(['obs_code' => $payloadObs["code-obs"]])
+          // ->one($dbLocal);
+          ->exists($dbLocal);
+
+        if ($checkObsLokal) {
+          $this->stdout("[!] Skip: duplicate data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
+          // $this->stdout("{json_encode($checkObsLokal)}");
+          continue;
+        }
+        // 4. Send Observation Lab
+        if (!$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
+          payload: $payloadObs,
+        )) {
+          continue;
+        }
+
+        // // 3. Kirim via Wrapper
+        $response = SshtApiBase::request(
+          SshtApiUrl::OBSERVATION_CREATE_LAB,
+          ['json' => $payloadObs]
+        );
+
+        $result = json_decode((string) $response->getBody(), true);
+        print_r(json_encode($result));
+
+        // // 5. if sucess send save to local
+        if (isset($result['status']) && ($result['status'] == 'true')) {
+          $data_api = $result['data'] ?? [];
+
+          $dbLocal->createCommand()->insert('ssht_observation', [
+            'observation_idIHS' => $data_api['observation_idIHS'],
+            'encounter_idIHS' => $data_api['encounter_idIHS'],
+            'subject_idIHS' => $data_api['subject_idIHS'],
+            'obs_code' => $data_api['obs_code'],
+            'obs_display' => $data_api['obs_display'],
+            'obs_value' => $data_api['obs_value'] ?? "",
+            'obs_valueString' => $data_api['obs_valueString'],
+            'date' => $data_api['date'],
+            'rm' => $srrm,
+            'status' => $data_api['status'],
+            'created_at' => date('Y-m-d H:i:s'),
+            'obs_system' => $data_api['obs_system'],
+            'category_system' => $data_api['category_system'],
+            'category_code' => $data_api['category_code'],
+            'category_display' => $data_api['category_display'],
+
+            // 2026-07-07 08:14 - disable baseOn itu dinamis tidak bisa di set static
+            // 'speciment_idIHS' => $data_api['speciment_idIHS'],
+            // "servicerequest_idIHS" => $data_api['servicerequest_idIHS'],
+            "codeable_value" => $data_api['codeable_value'] ?? "",
+            "codeable_display" => $data_api['codeable_display'] ?? "",
+            'intr_code' => $data_api['intr_code'] ?? "",
+            'intr_display' => $data_api['intr_display'] ?? "",
+            'date' => $data_api['date'],
+            'performer_idIHS' => $data_api['performer'],
+          ])->execute();
+
+          $this->stdout("  [OK] Observation Lab Saved: {$data_api['observation_idIHS']} ,from serviceRequest: {$payloadObs['servicerequest_idIHS']}, RM: {$srrm}\n");
+          // 6. else gagal send
+        } else {
+          $this->stdout("  [Failed] data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,from serviceRequest: {$payloadObs['servicerequest_idIHS']} ,Rm: {$srrm} , tanggal {$tgl_param}\n\n");
+          continue;
+        }
+        // end foreach obslab
+      }
+    }
+  }
+
+  /**
    * Run: php yii ssht-api-client/send-diagnostic-report-lab-ralan-single 2025-09-29 rm
    */
   public function actionSendDiagnosticReportLabRalanSingle(string $tgl_param, string $rm)
@@ -1303,6 +2009,128 @@ class SshtApiClientController extends Controller
       ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
       ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
       ->andWhere(['ssr.rm' => $rm])
+      ->andWhere(['ssr.status' => 'active'])
+      ->andWhere(['ssr.category_code' => '108252007'])
+      ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
+      // ->groupBy(['ssr.servicerequest_idIHS'])
+      ->all($dbLocal);
+
+    if (empty($serviceRequestLab)) {
+      $this->stdout("[!] Tydac ada data order serviceRequestLab tanggal {$tgl_param}\n");
+      return;
+    }
+
+    foreach ($serviceRequestLab as $srlab) {
+
+      $checkDr = (new Query())
+        ->from('ssht_diagnosticreport')
+        ->where(['rm' => $srlab['rm']])
+        ->andWhere(['like', 'date', $tgl_param])
+        ->andWhere(['servicerequest_idIHS' => $srlab['servicerequest_idIHS']])
+        ->andWhere(['category_code' => 'LAB'])
+        ->exists($dbLocal);
+
+      if ($checkDr) {
+        $this->stdout("[!] Skip: DiagnosticReport sudah ada untuk serviceRequestLab: {$srlab['servicerequest_idIHS']}, RM: {$srlab['rm']} , tanggal {$tgl_param}\n");
+        continue;
+      }
+
+      if (!$debugger->allow(
+        context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
+        payload: [
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "value" => "-",
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+          "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+        ],
+      )) {
+        continue;
+      }
+
+      $resR = SshtApiBase::request(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB, [
+        'json' => [
+          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+          "value" => "-",
+          "speciment_idIHS" => $srlab["speciment_idIHS"],
+          // "sampelID_testID" => "" // atau pake srid?
+          "srid" => $srlab["srid"] // atau pake srid?
+        ]
+      ]);
+
+      // $resRReq = json_decode((string) $resR->getBody(), true);
+      // print_r($resRReq);
+      // print_r(json_encode($resRReq));
+
+      if ($resR->getStatusCode() == 200 || $resR->getStatusCode() == 201) {
+        $resRReq = json_decode((string) $resR->getBody(), true);
+        print_r($resRReq);
+        print_r(json_encode($resRReq));
+        $resDataR = $resRReq['data'] ?? [];
+        $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
+          'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
+          'encounter_idIHS' => $resDataR['encounter_idIHS'],
+          'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
+          'subject_idIHS' => $resDataR['subject_idIHS'],
+          'rm' => $srlab['rm'],
+          'date' => $resDataR['date'],
+          'status' => $resDataR['status'],
+          'created_at' => date('Y-m-d H:i:s'),
+          'category_system' => $resDataR['category_system'],
+          'category_display' => $resDataR['category_display'],
+          'category_code' => $resDataR['category_code'],
+        ])->execute();
+        $this->stdout("  [OK] Report Saved: {$srlab['rm']}\n");
+      } else {
+        $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
+      }
+    }
+  }
+
+  /**
+   * Run: php yii ssht-api-client/send-diagnostic-report-lab-ralan 2025-09-29
+   */
+  public function actionSendDiagnosticReportLabRalan(string $tgl_param)
+  {
+    $class = 'AMB';
+
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $serviceRequestLab = (new Query())
+      ->select([
+        'ssr.servicerequest_idIHS',
+        'ssr.encounter_idIHS',
+        'ssr.category_code',
+        'ssr.category_display',
+        'ssr.code as sr_code',
+        'ssr.display as sr_display',
+        'ssr.perihal',
+        'ssr.rm',
+        'ssr.patient_idIHS',
+        'ssr.dok',
+        'ssr.dokter_request_idIHS',
+        'ssr.petugas_idIHS',
+        'ssr.petugas_nama',
+        'ssr.date',
+        // 'ssr.class',
+        'ssr.status',
+        'ssr.srid',
+        'ssp.speciment_idIHS',
+        'ssp.lokal_sampleID_testID',
+        'ssp.method_code',
+        'ssp.method_display',
+        'ssp.code as sp_code',
+        'ssp.display as sp_display',
+      ])
+      ->from('ssht_servicerequest ssr')
+      ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
+      ->where(['CAST(ssr.date AS DATE)' => $tgl_param])
       ->andWhere(['ssr.status' => 'active'])
       ->andWhere(['ssr.category_code' => '108252007'])
       ->andWhere(['ssr.category_display' => 'Laboratory procedure'])
