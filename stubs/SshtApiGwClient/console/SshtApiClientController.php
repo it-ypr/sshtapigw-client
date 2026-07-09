@@ -44,7 +44,7 @@ class SshtApiClientController extends Controller
     $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
     // Lab - Observation & DiagnosticReport (on-testing)
     // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
-    // $this->actionSendObservationLabRalan($tgl_param); 
+    // $this->actionSendObservationLabRalan($tgl_param);
     // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
     // $this->actionSendDiagnosticReportLabRalan($tgl_param);
     // EncounterFinish (inprogress)
@@ -1886,7 +1886,7 @@ class SshtApiClientController extends Controller
           ->from('ssht_observation sso')
           ->where([
             'sso.encounter_idIHS' => $srlab["encounter_idIHS"],
-            'rm' => $rm,
+            'rm' => $srrm,
             'status' => 'active',
             'obs_code' => $payloadObs["code-obs"],
           ])
@@ -1949,7 +1949,6 @@ class SshtApiClientController extends Controller
             "codeable_display" => $data_api['codeable_display'] ?? "",
             'intr_code' => $data_api['intr_code'] ?? "",
             'intr_display' => $data_api['intr_display'] ?? "",
-            'date' => $data_api['date'],
             'performer_idIHS' => $data_api['performer'],
           ])->execute();
 
@@ -1961,6 +1960,7 @@ class SshtApiClientController extends Controller
         }
         // end foreach obslab
       }
+      // endforeach serviceRequestLab
     }
   }
 
@@ -2300,7 +2300,6 @@ class SshtApiClientController extends Controller
       } catch (\Throwable $e) {
 
         $this->stdout("[+] Gagal Save Duplicate Speciment, Rm: {$rm}, lokal_sampleID_testID: {$payloadSpeciment['sampleID']} \n");
-        continue;
       }
     } else {
       // $now = date('Y-m-d H:i:s');
@@ -2317,9 +2316,9 @@ class SshtApiClientController extends Controller
       //     'id' => $idSpec
       //   ]
       // )->execute();
-      $this->stdout("[-] Failed Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$enc['rm']} \n");
-      continue;
+      $this->stdout("[-] Failed Send Speciment sampleID {$payloadSpeciment['sampleID']}, Rm: {$enc['rm']} \n");
     }
+    // end sendSpecimentRalanSingle()
   }
 
   public function actionSendSpecimentRalanSingle(string $tgl_param, string $rm) {}
@@ -2457,6 +2456,39 @@ class SshtApiClientController extends Controller
             // ]
           )->execute();
           $this->stdout("[+] Sukses ServiceRequest Lab: {json_encode($payload)}, Rm: {$rm}, ServiceRequest: {$sr_id_ihs} \n");
+
+          // 2026-07-09 14:52 - Moving this to up after saving payload serviceRequest to db, so you could easy to digest this crap code..
+
+          // SPECIMENT
+          // payload Speciment
+          $payloadSpeciment = [
+            "sampleID" => $lab["specimen"]["sample_id"],
+            "servicerequest_idIHS" => $sr_id_ihs,
+            "encounter_idIHS" => $enc["idIHS"],
+            "speciment_code" => $lab["specimen"]["specimen_code"],
+            "speciment_display" => $lab["specimen"]["specimen_display"],
+            "sampling_method" => $lab["specimen"]["sampling_method"],
+            "rm" => $rm,
+            "dok" => $enc['practition_lokalid'],
+          ];
+
+          if (!$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
+            payload: $payloadSpeciment,
+          )) {
+            continue;
+          }
+
+          $this->sendSpecimentRalanSingle(
+            $rm,
+            $enc,
+            $payload,
+            $lab,
+            $dataLabRalan,
+            $payloadSpeciment,
+            $sr_id_ihs
+          );
+          // end if succes send serviceRequest
         } else {
           // $now = date('Y-m-d H:i:s');
           // $dbLocal->createCommand()->update(
@@ -2475,36 +2507,7 @@ class SshtApiClientController extends Controller
           $this->stdout("[-] Failed ServiceRequest {json_encode($payload)}, Rm: {$enc['rm']} \n");
           continue;
         }
-
-        // SPECIMENT
-        // payload Speciment
-        $payloadSpeciment = [
-          "sampleID" => $lab["specimen"]["sample_id"],
-          "servicerequest_idIHS" => $sr_id_ihs,
-          "encounter_idIHS" => $enc["idIHS"],
-          "speciment_code" => $lab["specimen"]["specimen_code"],
-          "speciment_display" => $lab["specimen"]["specimen_display"],
-          "sampling_method" => $lab["specimen"]["sampling_method"],
-          "rm" => $rm,
-          "dok" => $enc['practition_lokalid'],
-        ];
-
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
-          payload: $payloadSpeciment,
-        )) {
-          continue;
-        }
-
-        $this->sendSpecimentRalanSingle(
-          $rm,
-          $enc,
-          $payload,
-          $lab,
-          $dataLabRalan,
-          $payloadSpeciment,
-          $sr_id_ihs
-        );
+        // endforeach dataLabRalan
       }
       // endforeach encounter
     }
