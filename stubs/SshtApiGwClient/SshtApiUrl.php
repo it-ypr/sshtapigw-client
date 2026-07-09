@@ -567,6 +567,40 @@ class SshtApiUrl
    */
   public const IMUNIZATION_PATCH = ['POST', 'ssht/imunization/patch'];
 
+  // MEDICATION
+  /**
+   * Create Medication
+   *
+   * Method: POST
+   * URL: api/v1/ssht/medication/create
+   *
+   * Body JSON:
+   * {
+   *   "local_id": "string (required|max:60) - ID lokal obat/resep",
+   *   "kfa_code": "string (required|max:30) - kode KFA obat",
+   *   "kfa_display": "string (required) - nama obat berdasarkan KFA",
+   *   "kfa_bza": [
+   *     {
+   *       "state": "string (required) - exp: valid",
+   *       "active": "boolean (required) - exp: true",
+   *       "kfa_code": "string (required|string|numeric|max:30) - kode kfa 91xxxxxx",
+   *       "zat_aktif": "string (required|string) - kfa_display (Paracetamol)",
+   *       "updated_at": "date (required) - exp: 2022-11-29 09:36:56",
+   *       "kekuatan_zat_aktif": "string (required|max:50) - kekuatan zat aktif (500 mg)"
+   *     }
+   *   ],
+   *   "kfa_form": {
+   *     "code": "string (required|max:10) - kode bentuk sediaan obat",
+   *     "name": "string (required|max:40) - nama bentuk sediaan obat"
+   *   },
+   *   "kfa_route": {
+   *     "code": "string (required|max:10) - kode rute pemberian obat",
+   *     "name": "string (required|max:40) - nama rute pemberian obat"
+   *   }
+   * }
+   */
+  public const MEDICATION_CREATE = ['POST', 'ssht/medication/create'];
+
   // MEDICATION_REQUEST
   /**
    * Create MedicationRequest.
