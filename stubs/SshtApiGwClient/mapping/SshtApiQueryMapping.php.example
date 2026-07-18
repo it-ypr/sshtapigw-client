@@ -356,6 +356,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
   public static function queryLabRalan(string $tanggal, string $rm)
   {
+    // ServiceReq & Speciment
     // query lab
     $result = (new Query())
       ->select([
@@ -375,10 +376,13 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'hgl.specimen_display',
         'hgl.loinc_order_code',
         'hgl.loinc_order_display',
+        'm.idssht as petugas_ihs',
+        'm.nm_user as petugas_nama',
       ])
       ->from(['lnb' => 'lab_newbiodata'])
       ->innerJoin(['ltx' => 'lab_transaksi'], 'lnb.NoTest = ltx.notest')
       ->innerJoin(['hgl' => 'harga_laborat'], 'ltx.kode_trn = hgl.test_id')
+      ->leftJoin('muser m', 'lnb.id_user = m.nik')
       ->where([
         'lnb.tanggal' => $tanggal,
         'lnb.rm' => $rm,
@@ -397,6 +401,8 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       'kode_dokter' => $first['d_kirim'], // muser.id_user
       'nama_dokter' => $first['d_nkirim'], // muser.rl_user
       'class' => 'AMB', // ambulatory (rawat jalan)
+      'petugas_ihs' => $first['petugas_ihs'],
+      'petugas_nama' => $first['petugas_nama']
     ];
 
     $labResult = [];
@@ -411,7 +417,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       $labResult[] = [
         'svc_req' => [
           'nama_lokal' => $row['jenis_trn'],
-          'service_req_code' => $row['notest'] . '-' . $row['kode_trn'], // lab_newbiodata
+          'service_req_code' => $row['notest'] . 'Q' . $row['kode_trn'], // lab_newbiodata
           'loinc_order_code' => $row['loinc_order_code'], // harga_laborat.loinc_order_code
           'loinc_order_display' => $row['loinc_order_display'], // harga_laborat.loinc_order_display
           'kategori' => $row['specimen'], // harga_laborat.specimen
@@ -424,7 +430,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ],
       ];
 
-      $rows[] = $row;
+      // $rows[] = $row;
     }
     // return $rows;
     $data['lab_result'] = $labResult;
