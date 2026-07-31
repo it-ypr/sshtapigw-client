@@ -44,9 +44,9 @@ class SshtApiClientController extends Controller
     $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
     // Lab - Observation & DiagnosticReport (on-testing)
     // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
-    // $this->actionSendObservationLabRalan($tgl_param);
+    $this->actionSendObservationLabRalan($tgl_param);
     // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
-    // $this->actionSendDiagnosticReportLabRalan($tgl_param);
+    $this->actionSendDiagnosticReportLabRalan($tgl_param);
     // EncounterFinish (inprogress)
   }
 
@@ -102,7 +102,8 @@ class SshtApiClientController extends Controller
 
   private function parseIcdCodes($rawCodes)
   {
-    if (empty($rawCodes)) return [];
+    if (empty($rawCodes))
+      return [];
 
     $mapping = [
       "R50.0" => "R50",
@@ -115,7 +116,8 @@ class SshtApiClientController extends Controller
 
     foreach ($codes as $c) {
       $clean = trim(preg_replace('/[^a-zA-Z0-9.]/', '', $c));
-      if (!$clean) continue;
+      if (!$clean)
+        continue;
 
       if (isset($mapping[$clean])) {
         $clean = $mapping[$clean];
@@ -126,16 +128,17 @@ class SshtApiClientController extends Controller
     $uniqueCodes = array_unique($normalizedCodes);
 
     // Query menggunakan database terminologi
-    return (new \yii\db\Query())
+    return (new Query())
       ->select(['icd10_code as code', 'icd10_en as display'])
       ->from('icd10')
       ->where(['icd10_code' => $uniqueCodes])
-      ->all(\Yii::$app->dbsshtterminologi);
+      ->all(Yii::$app->dbsshtterminologi);
   }
 
   private function parseIcd9Codes($rawCodes)
   {
-    if (empty($rawCodes)) return [];
+    if (empty($rawCodes))
+      return [];
 
     // $mapping = [
     //   "R50.0" => "R50",
@@ -161,12 +164,12 @@ class SshtApiClientController extends Controller
     // $uniqueCodes = array_unique($normalizedCodes);
 
     // Query menggunakan database terminologi
-    return (new \yii\db\Query())
+    return (new Query())
       ->select(['code', 'display'])
       ->from('icd9')
       // ->where(['code' => $uniqueCodes])
       ->where(['code' => $rawCodes])
-      ->one(\Yii::$app->dbsshtterminologi);
+      ->one(Yii::$app->dbsshtterminologi);
   }
 
   private function generateEncounterTimes($a_end)
@@ -332,10 +335,12 @@ class SshtApiClientController extends Controller
         ];
 
         // --- DEBUG & CONFIRMATION ---
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
-          payload: $payloadEncounter,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
+            payload: $payloadEncounter,
+          )
+        ) {
           continue;
         }
 
@@ -350,24 +355,24 @@ class SshtApiClientController extends Controller
           // Ambil data hasil wrap gateway
           $encData = $resEnc['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
-            'idIHS'              => $encData['idIHS'],
-            'subject_rm'         => $encData['subject_rm'],
-            'subject_idIHS'      => $encData['subject_idIHS'],
-            'subject_nama'       => $encData['subject_nama'],
-            'practition_idIHS'   => $encData['practition_idIHS'],
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
+            'idIHS' => $encData['idIHS'],
+            'subject_rm' => $encData['subject_rm'],
+            'subject_idIHS' => $encData['subject_idIHS'],
+            'subject_nama' => $encData['subject_nama'],
+            'practition_idIHS' => $encData['practition_idIHS'],
             'practition_lokalid' => $row['dokter'], // Ambil dari data lokal SIMRS kamu
-            'practition_nama'    => $encData['practition_nama'],
-            'location_idIHS'     => $encData['location_idIHS'],
-            'location_nama'      => $encData['location_nama'],
-            'organization_idIHS'  => $encData['organization_idIHS'],
-            'arrived_start'      => $encData['arrived_at'],
-            'arrived_end'        => $encData['arrived_end'],
-            'inprogress_start'   => $encData['inprogress_start'],
-            'inprogress_end'     => $times['inprogress_end'], // dari generator lokal
-            'created_at'         => date('Y-m-d H:i:s'),
-            'updated_at'         => date('Y-m-d H:i:s'),
-            'class'              => $encData['class'],
+            'practition_nama' => $encData['practition_nama'],
+            'location_idIHS' => $encData['location_idIHS'],
+            'location_nama' => $encData['location_nama'],
+            'organization_idIHS' => $encData['organization_idIHS'],
+            'arrived_start' => $encData['arrived_at'],
+            'arrived_end' => $encData['arrived_end'],
+            'inprogress_start' => $encData['inprogress_start'],
+            'inprogress_end' => $times['inprogress_end'], // dari generator lokal
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+            'class' => $encData['class'],
           ])->execute();
 
           // 6. SEND CONDITION (Looping ICD10)
@@ -385,33 +390,35 @@ class SshtApiClientController extends Controller
             ];
 
             // --- DEBUG & CONFIRMATION ---
-            if (!$debugger->allow(
-              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
-              payload: $payloadCondition,
-            )) {
+            if (
+              !$debugger->allow(
+                context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
+                payload: $payloadCondition,
+              )
+            ) {
               continue;
             }
 
             $resCondReq = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
             sleep(2);
-            $resCond = json_decode((string)$resCondReq->getBody(), true);
+            $resCond = json_decode((string) $resCondReq->getBody(), true);
             $conditionIhsId = $resCond['data']['idIHS'] ?? null;
 
             if ($conditionIhsId) {
               $condData = $resCond['data'];
 
-              \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
+              Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
                 'condition_idIHS' => $conditionIhsId,
                 'encounter_idIHS' => $encounterIhsId,
                 // 'conditionRank'   => ($key == 0) ? 1 : 2, // salah karena nanti 1,2,2,2...
                 // index mulai dari 1,2,3,4...
-                'conditionRank'   => ($key + 1),
-                'code'            => $icd['code'],
-                'display'         => $icd['display'],
-                'rm'              => $row['rm'],
-                'dok'             => $row['dokter'],
-                'created_at'      => date('Y-m-d H:i:s'),
-                'updated_at'      => date('Y-m-d H:i:s'),
+                'conditionRank' => ($key + 1),
+                'code' => $icd['code'],
+                'display' => $icd['display'],
+                'rm' => $row['rm'],
+                'dok' => $row['dokter'],
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
               ])->execute();
             }
             echo "   > Condition OK: " . ($condData['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
@@ -420,7 +427,7 @@ class SshtApiClientController extends Controller
           echo " FAILED ENCOUNTER";
           sleep(2);
         }
-      } catch (\Exception $e) {
+      } catch (Exception $e) {
         echo " ERROR: " . $e->getMessage() . "\n";
         sleep(5);
       }
@@ -503,10 +510,12 @@ class SshtApiClientController extends Controller
         ];
 
         // --- DEBUG & CONFIRMATION ---
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
-          payload: $payloadEncounter,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_CREATE),
+            payload: $payloadEncounter,
+          )
+        ) {
           continue;
         }
 
@@ -521,24 +530,24 @@ class SshtApiClientController extends Controller
           // Ambil data hasil wrap gateway
           $encData = $resEnc['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
-            'idIHS'              => $encData['idIHS'],
-            'subject_rm'         => $encData['subject_rm'],
-            'subject_idIHS'      => $encData['subject_idIHS'],
-            'subject_nama'       => $encData['subject_nama'],
-            'practition_idIHS'   => $encData['practition_idIHS'],
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_encounter', [
+            'idIHS' => $encData['idIHS'],
+            'subject_rm' => $encData['subject_rm'],
+            'subject_idIHS' => $encData['subject_idIHS'],
+            'subject_nama' => $encData['subject_nama'],
+            'practition_idIHS' => $encData['practition_idIHS'],
             'practition_lokalid' => $row['dokter'], // Ambil dari data lokal SIMRS kamu
-            'practition_nama'    => $encData['practition_nama'],
-            'location_idIHS'     => $encData['location_idIHS'],
-            'location_nama'      => $encData['location_nama'],
-            'organization_idIHS'  => $encData['organization_idIHS'],
-            'arrived_start'      => $encData['arrived_at'],
-            'arrived_end'        => $encData['arrived_end'],
-            'inprogress_start'   => $encData['inprogress_start'],
-            'inprogress_end'     => $times['inprogress_end'], // dari generator lokal
-            'created_at'         => date('Y-m-d H:i:s'),
-            'updated_at'         => date('Y-m-d H:i:s'),
-            'class'              => $encData['class'],
+            'practition_nama' => $encData['practition_nama'],
+            'location_idIHS' => $encData['location_idIHS'],
+            'location_nama' => $encData['location_nama'],
+            'organization_idIHS' => $encData['organization_idIHS'],
+            'arrived_start' => $encData['arrived_at'],
+            'arrived_end' => $encData['arrived_end'],
+            'inprogress_start' => $encData['inprogress_start'],
+            'inprogress_end' => $times['inprogress_end'], // dari generator lokal
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+            'class' => $encData['class'],
           ])->execute();
 
           // 6. SEND CONDITION (Looping ICD10)
@@ -556,33 +565,35 @@ class SshtApiClientController extends Controller
             ];
 
             // --- DEBUG & CONFIRMATION ---
-            if (!$debugger->allow(
-              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
-              payload: $payloadCondition,
-            )) {
+            if (
+              !$debugger->allow(
+                context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_CREATE),
+                payload: $payloadCondition,
+              )
+            ) {
               continue;
             }
 
             $resCondReq = SshtApiBase::request(SshtApiUrl::CONDITION_CREATE, ['json' => $payloadCondition]);
             sleep(2);
-            $resCond = json_decode((string)$resCondReq->getBody(), true);
+            $resCond = json_decode((string) $resCondReq->getBody(), true);
             $conditionIhsId = $resCond['data']['idIHS'] ?? null;
 
             if ($conditionIhsId) {
               $condData = $resCond['data'];
 
-              \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
+              Yii::$app->sshtAPIdb->createCommand()->insert('ssht_condition', [
                 'condition_idIHS' => $conditionIhsId,
                 'encounter_idIHS' => $encounterIhsId,
                 // 'conditionRank'   => ($key == 0) ? 1 : 2, // salah karena nanti 1,2,2,2...
                 // index mulai dari 1,2,3,4...
-                'conditionRank'   => ($key + 1),
-                'code'            => $icd['code'],
-                'display'         => $icd['display'],
-                'rm'              => $row['rm'],
-                'dok'             => $row['dokter'],
-                'created_at'      => date('Y-m-d H:i:s'),
-                'updated_at'      => date('Y-m-d H:i:s'),
+                'conditionRank' => ($key + 1),
+                'code' => $icd['code'],
+                'display' => $icd['display'],
+                'rm' => $row['rm'],
+                'dok' => $row['dokter'],
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
               ])->execute();
             }
             echo "   > Condition OK: " . ($condData['idIHS'] ?? 'FAILED') . " ({$icd['code']})\n";
@@ -591,7 +602,7 @@ class SshtApiClientController extends Controller
           echo " FAILED ENCOUNTER";
           sleep(2);
         }
-      } catch (\Exception $e) {
+      } catch (Exception $e) {
         echo " ERROR: " . $e->getMessage() . "\n";
         sleep(5);
       }
@@ -652,10 +663,12 @@ class SshtApiClientController extends Controller
 
     foreach ($encounter as $record) {
       // --- DEBUG & CONFIRMATION ---
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
-        payload: $record['idIHS'],
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+          payload: $record['idIHS'],
+        )
+      ) {
         continue;
       }
       $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
@@ -749,15 +762,15 @@ class SshtApiClientController extends Controller
 
             return [
               'condition_idIHS' => $localItem['condition_idIHS'],
-              'code'            => $localItem['code'],
-              'display'         => $localItem['display'],
-              'conditionRank'   => (string) $rank,
+              'code' => $localItem['code'],
+              'display' => $localItem['display'],
+              'conditionRank' => (string) $rank,
             ];
           }, $getConditionLocal);
 
           // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
           usort($diagnosis, function ($a, $b) {
-            return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
+            return (int) $a['conditionRank'] <=> (int) $b['conditionRank'];
           });
 
           print_r("diagnosis data sort: \n");
@@ -769,10 +782,12 @@ class SshtApiClientController extends Controller
 
             // --- DEBUG & CONFIRMATION ---
             echo "\nSort conditionRank di table local ssht_condition? [Enter/y]=continue, s=skip, q=quit > \n";
-            if (!$debugger->allow(
-              context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET),
-              payload: $diag,
-            )) {
+            if (
+              !$debugger->allow(
+                context: SshtApiUtil::genDebugContext(SshtApiUrl::CONDITION_GET),
+                payload: $diag,
+              )
+            ) {
               continue;
             }
 
@@ -785,14 +800,14 @@ class SshtApiClientController extends Controller
 
             if (
               empty($current['conditionRank']) ||
-              (string)$current['conditionRank'] !== (string)$diag['conditionRank']
+              (string) $current['conditionRank'] !== (string) $diag['conditionRank']
             ) {
 
               // update rank condition
-              \Yii::$app->sshtAPIdb->createCommand()->update(
+              Yii::$app->sshtAPIdb->createCommand()->update(
                 'ssht_condition',
                 [
-                  'conditionRank'   => (string) $diag['conditionRank'],
+                  'conditionRank' => (string) $diag['conditionRank'],
                 ],
                 [
                   'condition_idIHS' => $diag['condition_idIHS']
@@ -831,10 +846,12 @@ class SshtApiClientController extends Controller
           print_r($payloadEncounterFinish);
 
           // --- DEBUG & CONFIRMATION ---
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
-            payload: $payloadEncounterFinish,
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
+              payload: $payloadEncounterFinish,
+            )
+          ) {
             continue;
           }
 
@@ -855,15 +872,15 @@ class SshtApiClientController extends Controller
             $encData = $resEnc['data'];
 
             // save encounter finish
-            \Yii::$app->sshtAPIdb->createCommand()->update(
+            Yii::$app->sshtAPIdb->createCommand()->update(
               'ssht_encounter',
               [
-                'idIHS'          => $encData['idIHS'],
+                'idIHS' => $encData['idIHS'],
                 'inprogress_end' => $encData['inprogress_end'],
-                'finish_start'   => $encData['finish_start'],
-                'finish_end'     => $encData['finish_end'],
-                'updated_at'     => date('Y-m-d H:i:s'),
-                'class'          => $encData['class'],
+                'finish_start' => $encData['finish_start'],
+                'finish_end' => $encData['finish_end'],
+                'updated_at' => date('Y-m-d H:i:s'),
+                'class' => $encData['class'],
               ],
               [
                 'idIHS' => $encounterIhsId,
@@ -876,7 +893,7 @@ class SshtApiClientController extends Controller
             sleep(2);
           }
           // end if encounter get
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
           echo " ERROR: " . $e->getMessage() . "\n";
           sleep(5);
         }
@@ -935,10 +952,12 @@ class SshtApiClientController extends Controller
 
     foreach ($encounters as $record) {
 
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
-        payload: $record['idIHS']
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+          payload: $record['idIHS']
+        )
+      ) {
         continue;
       }
 
@@ -951,7 +970,7 @@ class SshtApiClientController extends Controller
         ]
       );
 
-      $resEnc = json_decode((string)$resEncReq->getBody(), true);
+      $resEnc = json_decode((string) $resEncReq->getBody(), true);
 
       print_r($resEnc);
 
@@ -991,9 +1010,9 @@ class SshtApiClientController extends Controller
 
             return [
               'condition_idIHS' => $item['condition_idIHS'],
-              'code'            => $item['code'],
-              'display'         => $item['display'],
-              'conditionRank'   => (string)$item['conditionRank'],
+              'code' => $item['code'],
+              'display' => $item['display'],
+              'conditionRank' => (string) $item['conditionRank'],
             ];
           },
           $getConditionLocal
@@ -1034,12 +1053,14 @@ class SshtApiClientController extends Controller
 
         print_r($payloadEncounterFinish);
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(
-            SshtApiUrl::ENCOUNTER_FINISH
-          ),
-          payload: $payloadEncounterFinish
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(
+              SshtApiUrl::ENCOUNTER_FINISH
+            ),
+            payload: $payloadEncounterFinish
+          )
+        ) {
           continue;
         }
 
@@ -1051,7 +1072,7 @@ class SshtApiClientController extends Controller
         );
 
         $resFinish = json_decode(
-          (string)$encounterFinish->getBody(),
+          (string) $encounterFinish->getBody(),
           true
         );
 
@@ -1063,12 +1084,12 @@ class SshtApiClientController extends Controller
           $encounterFinish->getStatusCode() == 201
         ) {
 
-          \Yii::$app->sshtAPIdb->createCommand()->update(
+          Yii::$app->sshtAPIdb->createCommand()->update(
             'ssht_encounter',
             [
               'finish_start' => $resFinish['data']['finish_start'] ?? $record['finish_start'],
-              'finish_end'   => $resFinish['data']['finish_end'] ?? $record['finish_end'],
-              'updated_at'   => date('Y-m-d H:i:s'),
+              'finish_end' => $resFinish['data']['finish_end'] ?? $record['finish_end'],
+              'updated_at' => date('Y-m-d H:i:s'),
             ],
             [
               'idIHS' => $encounterIhsId
@@ -1128,10 +1149,12 @@ class SshtApiClientController extends Controller
 
     foreach ($encounter as $record) {
       // --- DEBUG & CONFIRMATION ---
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
-        payload: $record['idIHS'],
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_GET),
+          payload: $record['idIHS'],
+        )
+      ) {
         continue;
       }
       $resEncReq = SshtApiBase::request(SshtApiUrl::ENCOUNTER_GET, ['query' => ['id' => $record['idIHS']]]);
@@ -1223,15 +1246,15 @@ class SshtApiClientController extends Controller
 
           return [
             'condition_idIHS' => $localItem['condition_idIHS'],
-            'code'            => $localItem['code'],
-            'display'         => $localItem['display'],
-            'conditionRank'   => (string) $rank,
+            'code' => $localItem['code'],
+            'display' => $localItem['display'],
+            'conditionRank' => (string) $rank,
           ];
         }, $getConditionLocal);
 
         // 3. Urutkan hasil akhir agar Rank 1 (Primary) berada di index [0] payload
         usort($diagnosis, function ($a, $b) {
-          return (int)$a['conditionRank'] <=> (int)$b['conditionRank'];
+          return (int) $a['conditionRank'] <=> (int) $b['conditionRank'];
         });
 
         $payloadEncounterFinish = [
@@ -1260,10 +1283,12 @@ class SshtApiClientController extends Controller
         ];
 
         // --- DEBUG & CONFIRMATION ---
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
-          payload: $payloadEncounterFinish,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::ENCOUNTER_FINISH),
+            payload: $payloadEncounterFinish,
+          )
+        ) {
           continue;
         }
 
@@ -1280,25 +1305,49 @@ class SshtApiClientController extends Controller
     echo "\n--- TASK BOT DONE ---\n";
   }
 
-  public function actionSendCondition($tgl_param) {}
+  public function actionSendCondition($tgl_param)
+  {
+  }
 
-  public function actionSendObservationVitalTd($tgl_param) {}
+  public function actionSendObservationVitalTd($tgl_param)
+  {
+  }
 
-  public function actionSendObservationVitalNapas($tgl_param) {}
+  public function actionSendObservationVitalNapas($tgl_param)
+  {
+  }
 
-  public function actionSendObservationVitalSuhu($tgl_param) {}
+  public function actionSendObservationVitalSuhu($tgl_param)
+  {
+  }
 
-  public function actionSendAllergy($tgl_param) {}
+  public function actionSendAllergy($tgl_param)
+  {
+  }
 
-  public function actionSendCompositionDiet($tgl_param) {}
+  public function actionSendCompositionDiet($tgl_param)
+  {
+  }
 
-  public function actionSendServiceRequestEkg($tgl_param) {}
-  public function actionSendServiceRequestEco($tgl_param) {}
-  public function actionSendServiceRequestNebulasi($tgl_param) {}
+  public function actionSendServiceRequestEkg($tgl_param)
+  {
+  }
+  public function actionSendServiceRequestEco($tgl_param)
+  {
+  }
+  public function actionSendServiceRequestNebulasi($tgl_param)
+  {
+  }
 
-  public function actionSendProcedureDanObservationEkg($tgl_param) {}
-  public function actionSendProcedureDanObservationEco($tgl_param) {}
-  public function actionSendProcedureDanObservationNebulasi($tgl_param) {}
+  public function actionSendProcedureDanObservationEkg($tgl_param)
+  {
+  }
+  public function actionSendProcedureDanObservationEco($tgl_param)
+  {
+  }
+  public function actionSendProcedureDanObservationNebulasi($tgl_param)
+  {
+  }
 
 
   /**
@@ -1398,14 +1447,16 @@ class SshtApiClientController extends Controller
         //
         // $idSr = $dbLocal->getLastInsertID();
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
-          payload: $payload,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
+            payload: $payload,
+          )
+        ) {
           continue;
         }
 
-        // // 3. Kirim via Wrapper
+        // 3. Kirim via Wrapper
         $response = SshtApiBase::request(
           SshtApiUrl::SERVICE_REQUEST_CREATE_LAB,
           ['json' => $payload]
@@ -1505,10 +1556,12 @@ class SshtApiClientController extends Controller
           continue;
         }
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
-          payload: $payloadSpeciment,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
+            payload: $payloadSpeciment,
+          )
+        ) {
           continue;
         }
 
@@ -1523,6 +1576,29 @@ class SshtApiClientController extends Controller
         );
       }
     }
+  }
+
+  /**
+   * Test output data observation lab ralan
+   * Example command: php yii ssht-api-client/obs-lab-ralan-test 2025-09-29 320904 58410-2
+   */
+  public static function actionObsLabRalanTest(
+    string $tgl_param,
+    string $rm_param,
+    string $loinc_order
+  ) {
+    $dataObsLabRalan = SshtApiQueryMapping::getObservationLabLocalRalan(
+      $tgl_param,
+      $rm_param,
+      $loinc_order
+    );
+
+    if (empty($dataObsLabRalan)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+    }
+
+    echo "Ditemukan " . count($dataObsLabRalan) . " data.\n";
+    print_r($dataObsLabRalan);
   }
 
   /**
@@ -1598,7 +1674,8 @@ class SshtApiClientController extends Controller
       }
 
       foreach ($obsLabs as $obsLab) {
-        // 1. cek $obsLab loinc dengan param di loinc_lab (mengkasifikasi tipe isian berdasarkan jenis panel pemeriksaan)
+        // 1. cek $obsLab loinc dengan param di loinc_lab 
+        // (mengkasifikasi tipe isian berdasarkan jenis panel pemeriksaan)
         $labloinc = (new Query())
           ->select([
             'code',
@@ -1609,8 +1686,8 @@ class SshtApiClientController extends Controller
             'code_system'
           ])
           ->from('loinc_lab')
-          ->where(['code' => $obsLab["loinc"]])
-          ->one(\Yii::$app->dbsshtterminologi);
+          ->where(['code' => $obsLab["loinc_code"]])
+          ->one(Yii::$app->dbsshtterminologi);
 
         if (empty($labloinc)) {
           $this->stdout("[!] Skip: tydac ditemukan kode loinc untuk data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
@@ -1640,7 +1717,7 @@ class SshtApiClientController extends Controller
           //   ? explode("-", $obsLab["ANGKA_NORMAL"])
           //   : '',
           "referenceRange" => (
-            ($range = array_map('trim', explode('-', $obsLab["ANGKA_NORMAL"], 2))) &&
+            ($range = array_map('trim', explode('-', $obsLab["referenceRange"], 2))) &&
             isset($range[1], $range[0]) &&
             $range[0] !== '' &&
             $range[1] !== ''
@@ -1686,10 +1763,12 @@ class SshtApiClientController extends Controller
           continue;
         }
         // 4. Send Observation Lab
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
-          payload: $payloadObs,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
+            payload: $payloadObs,
+          )
+        ) {
           continue;
         }
 
@@ -1730,7 +1809,6 @@ class SshtApiClientController extends Controller
             "codeable_display" => $data_api['codeable_display'] ?? "",
             'intr_code' => $data_api['intr_code'] ?? "",
             'intr_display' => $data_api['intr_display'] ?? "",
-            'date' => $data_api['date'],
             'performer_idIHS' => $data_api['performer'],
           ])->execute();
 
@@ -1828,8 +1906,8 @@ class SshtApiClientController extends Controller
             'code_system'
           ])
           ->from('loinc_lab')
-          ->where(['code' => $obsLab["loinc"]])
-          ->one(\Yii::$app->dbsshtterminologi);
+          ->where(['code' => $obsLab["loinc_code"]])
+          ->one(Yii::$app->dbsshtterminologi);
 
         if (empty($labloinc)) {
           $this->stdout("[!] Skip: tydac ditemukan kode loinc untuk data Hasil Observasi lab dengan kode lokal: {$obsLab['TEST_ID']} ,Rm: {$srrm} , tanggal {$tgl_param}\n");
@@ -1859,7 +1937,7 @@ class SshtApiClientController extends Controller
           //   ? explode("-", $obsLab["ANGKA_NORMAL"])
           //   : '',
           "referenceRange" => (
-            ($range = array_map('trim', explode('-', $obsLab["ANGKA_NORMAL"], 2))) &&
+            ($range = array_map('trim', explode('-', $obsLab["referenceRange"], 2))) &&
             isset($range[1], $range[0]) &&
             $range[0] !== '' &&
             $range[1] !== ''
@@ -1905,10 +1983,12 @@ class SshtApiClientController extends Controller
           continue;
         }
         // 4. Send Observation Lab
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
-          payload: $payloadObs,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_LAB),
+            payload: $payloadObs,
+          )
+        ) {
           continue;
         }
 
@@ -2035,16 +2115,18 @@ class SshtApiClientController extends Controller
         continue;
       }
 
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
-        payload: [
-          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
-          "value" => "-",
-          "speciment_idIHS" => $srlab["speciment_idIHS"],
-          // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
-          "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
-        ],
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
+          payload: [
+            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+            "value" => "-",
+            "speciment_idIHS" => $srlab["speciment_idIHS"],
+            // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+            "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+          ],
+        )
+      ) {
         continue;
       }
 
@@ -2067,22 +2149,22 @@ class SshtApiClientController extends Controller
         print_r($resRReq);
         print_r(json_encode($resRReq));
         $resDataR = $resRReq['data'] ?? [];
-        $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
-          'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
-          'encounter_idIHS' => $resDataR['encounter_idIHS'],
-          'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
-          'subject_idIHS' => $resDataR['subject_idIHS'],
-          'rm' => $srlab['rm'],
-          'date' => $resDataR['date'],
-          'status' => $resDataR['status'],
-          'created_at' => date('Y-m-d H:i:s'),
-          'category_system' => $resDataR['category_system'],
-          'category_display' => $resDataR['category_display'],
-          'category_code' => $resDataR['category_code'],
-        ])->execute();
+        // $dbLocal->createCommand()->insert('ssht_diagnosticreport', [
+        //   'diagnosticreport_idIHS' => $resDataR['diagnosticreport_idIHS'],
+        //   'encounter_idIHS' => $resDataR['encounter_idIHS'],
+        //   'servicerequest_idIHS' => $srlab["servicerequest_idIHS"],
+        //   'subject_idIHS' => $resDataR['subject_idIHS'],
+        //   'rm' => $srlab['rm'],
+        //   'date' => $resDataR['date'],
+        //   'status' => $resDataR['status'],
+        //   'created_at' => date('Y-m-d H:i:s'),
+        //   'category_system' => $resDataR['category_system'],
+        //   'category_display' => $resDataR['category_display'],
+        //   'category_code' => $resDataR['category_code'],
+        // ])->execute();
         $this->stdout("  [OK] Report Saved: {$srlab['rm']}\n");
       } else {
-        $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
+        // $this->stdout("  [Gagal] Gagal save di db, diagnosticreport_idIHS: {$resDataR['diagnosticreport_idIHS']}, RM {$srlab['rm']}.\n");
       }
     }
   }
@@ -2157,16 +2239,18 @@ class SshtApiClientController extends Controller
         continue;
       }
 
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
-        payload: [
-          "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
-          "value" => "-",
-          "speciment_idIHS" => $srlab["speciment_idIHS"],
-          // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
-          "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
-        ],
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
+          payload: [
+            "servicerequest_idIHS" => $srlab["servicerequest_idIHS"],
+            "value" => "-",
+            "speciment_idIHS" => $srlab["speciment_idIHS"],
+            // "sampelID_testID" => "" // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+            "srid" => $srlab["srid"] // atau pake srid? nick ganti DRLAB{xx}Q{xx}
+          ],
+        )
+      ) {
         continue;
       }
 
@@ -2252,7 +2336,7 @@ class SshtApiClientController extends Controller
       ['json' => $payloadSpeciment]
     );
 
-    $result = json_decode((string)$response->getBody(), true);
+    $result = json_decode((string) $response->getBody(), true);
 
     if (isset($result['status']) && ($result['status'] == 'true')) {
       $data_api = $result['data'] ?? [];
@@ -2321,7 +2405,9 @@ class SshtApiClientController extends Controller
     // end sendSpecimentRalanSingle()
   }
 
-  public function actionSendSpecimentRalanSingle(string $tgl_param, string $rm) {}
+  public function actionSendSpecimentRalanSingle(string $tgl_param, string $rm)
+  {
+  }
 
   /**
    * Run Cron: php yii ssht-api-client/send-service-request-and-speciment-lab-ralan 2026-05-01
@@ -2397,20 +2483,22 @@ class SshtApiClientController extends Controller
         //
         // $idSr = $dbLocal->getLastInsertID();
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
-          payload: $payload,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_LAB),
+            payload: $payload,
+          )
+        ) {
           continue;
         }
 
-        // // 3. Kirim via Wrapper
+        // 3. Kirim via Wrapper
         $response = SshtApiBase::request(
           SshtApiUrl::SERVICE_REQUEST_CREATE_LAB,
           ['json' => $payload]
         );
 
-        $result = json_decode((string)$response->getBody(), true);
+        $result = json_decode((string) $response->getBody(), true);
         print_r(json_encode($result));
         // exit;
 
@@ -2472,10 +2560,12 @@ class SshtApiClientController extends Controller
             "dok" => $enc['practition_lokalid'],
           ];
 
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
-            payload: $payloadSpeciment,
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::SPECIMENT_CREATE),
+              payload: $payloadSpeciment,
+            )
+          ) {
             continue;
           }
 
@@ -2513,9 +2603,15 @@ class SshtApiClientController extends Controller
     }
   }
 
-  public function actionSendServiceRequestLab($tgl_param) {}
-  public function actionSendSpecimentLab($tgl_param) {}
-  public function actionSendObservationDanDiagnosticReportLab($tgl_param) {}
+  public function actionSendServiceRequestLab($tgl_param)
+  {
+  }
+  public function actionSendSpecimentLab($tgl_param)
+  {
+  }
+  public function actionSendObservationDanDiagnosticReportLab($tgl_param)
+  {
+  }
 
   /**
    * Run Cron: php yii ssht-api-client/send-service-request-radio 2026-05-01
@@ -2575,10 +2671,12 @@ class SshtApiClientController extends Controller
         ];
 
         // --- DEBUG & CONFIRMATION ---
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_RAD),
-          payload: $payload,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::SERVICE_REQUEST_CREATE_RAD),
+            payload: $payload,
+          )
+        ) {
           continue;
         }
 
@@ -2588,7 +2686,7 @@ class SshtApiClientController extends Controller
           ['json' => $payload]
         );
 
-        $result = json_decode((string)$response->getBody(), true);
+        $result = json_decode((string) $response->getBody(), true);
 
         if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
           $data_api = $result['data'] ?? [];
@@ -2626,7 +2724,7 @@ class SshtApiClientController extends Controller
           $this->stdout("[ERR] RM: $rm | " . Json::encode($errMsg) . "\n");
         }
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
     }
   }
@@ -2662,7 +2760,7 @@ class SshtApiClientController extends Controller
       $client = new Client([
         'base_uri' => $config["orthanc_url"],
         'auth' => [$config["orthanc_auth_user"], $config["orthanc_auth_password"]],
-        'timeout'  => 30.0,
+        'timeout' => 30.0,
       ]);
 
 
@@ -2688,7 +2786,7 @@ class SshtApiClientController extends Controller
         $findRes = $client->post('/tools/find', [
           'json' => [
             'Level' => 'Study',
-            'Query' => ['AccessionNumber' => (string)$noradio]
+            'Query' => ['AccessionNumber' => (string) $noradio]
           ]
         ]);
         $studies = json_decode($findRes->getBody(), true);
@@ -2706,7 +2804,7 @@ class SshtApiClientController extends Controller
             'json' => [
               'Replace' => [
                 'AccessionNumber' => $new_acsn,
-                'PatientID' => (string)$patient_id_ihs,
+                'PatientID' => (string) $patient_id_ihs,
               ],
               'Force' => true
             ]
@@ -2737,7 +2835,7 @@ class SshtApiClientController extends Controller
           }
         }
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->stdout("[CRITICAL] Error: " . $e->getMessage() . "\n");
     }
   }
@@ -2769,14 +2867,17 @@ class SshtApiClientController extends Controller
 
       foreach ($items as $master) {
         $imgIdIhs = $master['idIHS'] ?? null;
-        if (!$imgIdIhs) continue;
+        if (!$imgIdIhs)
+          continue;
 
         try {
 
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::IMAGINGSTUDY_GET),
-            payload: ["imagingstudy_idIHS" => $imgIdIhs],
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::IMAGINGSTUDY_GET),
+              payload: ["imagingstudy_idIHS" => $imgIdIhs],
+            )
+          ) {
             continue;
           }
 
@@ -2786,7 +2887,8 @@ class SshtApiClientController extends Controller
           ]);
           $detailDataReq = json_decode((string) $respDetail->getBody(), true);
           $detailData = $detailDataReq['data'] ?? null;
-          if (!$detailData) continue;
+          if (!$detailData)
+            continue;
 
           $srIdIhs = $detailData['servicerequest_idIHS'];
           $acsnFull = $detailData['acsn'] ?? "";
@@ -2818,15 +2920,17 @@ class SshtApiClientController extends Controller
               // "rm" => "required|alpha_dash",
               // "valueString" => "sometimes|string",
 
-              if (!$debugger->allow(
-                context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_RAD),
-                payload: [
-                  "servicerequest_idIHS" => $srIdIhs,
-                  "imagingstudy_idIHS" => $imgIdIhs,
-                  "rm" => $row['rm'],
-                  "valueString" => $obsText
-                ],
-              )) {
+              if (
+                !$debugger->allow(
+                  context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_RAD),
+                  payload: [
+                    "servicerequest_idIHS" => $srIdIhs,
+                    "imagingstudy_idIHS" => $imgIdIhs,
+                    "rm" => $row['rm'],
+                    "valueString" => $obsText
+                  ],
+                )
+              ) {
                 continue;
               }
 
@@ -2876,14 +2980,16 @@ class SshtApiClientController extends Controller
 
             if (!$checkDr) {
 
-              if (!$debugger->allow(
-                context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD),
-                payload: [
-                  "servicerequest_idIHS" => $srIdIhs,
-                  "value" => $impressionText,
-                  "noradio" => $noradio
-                ],
-              )) {
+              if (
+                !$debugger->allow(
+                  context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_RAD),
+                  payload: [
+                    "servicerequest_idIHS" => $srIdIhs,
+                    "value" => $impressionText,
+                    "noradio" => $noradio
+                  ],
+                )
+              ) {
                 continue;
               }
 
@@ -2918,12 +3024,12 @@ class SshtApiClientController extends Controller
               $this->stdout("  [SKIP] Report RM {$row['rm']} sudah ada.\n");
             }
           }
-        } catch (\Exception $itemErr) {
+        } catch (Exception $itemErr) {
           $this->stdout(" [!] Gagal memproses: " . $itemErr->getMessage() . "\n");
           continue;
         }
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->stdout("\n[CRITICAL] Error Global: " . $e->getMessage() . "\n");
     }
   }
@@ -3027,10 +3133,12 @@ class SshtApiClientController extends Controller
           ];
 
           // debugger
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_VITAL),
-            payload: $payload,
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::OBSERVATION_CREATE_VITAL),
+              payload: $payload,
+            )
+          ) {
             continue;
           }
 
@@ -3039,11 +3147,11 @@ class SshtApiClientController extends Controller
             ['json' => $payload]
           );
 
-          $result = json_decode((string)$response->getBody(), true);
+          $result = json_decode((string) $response->getBody(), true);
 
           // $this->stdout()
           $this->stdout("[PROCESS] RM $rm\n");
-          $this->stdout((string)$response->getBody());
+          $this->stdout((string) $response->getBody());
 
           if (isset($result['status']) && ($result['status'] == 'true' || $result['status'] === true)) {
             $data_api = $result['data'] ?? [];
@@ -3079,7 +3187,7 @@ class SshtApiClientController extends Controller
         }
         // end for encounter data
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
     }
   }
@@ -3188,10 +3296,12 @@ class SshtApiClientController extends Controller
           ];
 
           // --- DEBUG & CONFIRMATION ---
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::PROCEDURE_CREATE),
-            payload: $payloadProcedure,
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::PROCEDURE_CREATE),
+              payload: $payloadProcedure,
+            )
+          ) {
             continue;
           }
 
@@ -3218,23 +3328,23 @@ class SshtApiClientController extends Controller
           if ($procedureIhsId) {
             $procData = $resProc['data'];
 
-            \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_procedure', [
+            Yii::$app->sshtAPIdb->createCommand()->insert('ssht_procedure', [
               'procedure_idIHS' => $procedureIhsId,
               'encounter_idIHS' => $enc['idIHS'],
-              'code'            => $procData['code'],
-              'display'         => $procData['display'],
-              'system'         => $procData['system'],
-              'category_code'   => $procData['category_code'],
+              'code' => $procData['code'],
+              'display' => $procData['display'],
+              'system' => $procData['system'],
+              'category_code' => $procData['category_code'],
               'category_display' => $procData['category_display'],
               'category_system' => $procData['category_system'],
-              'subject_idIHS'   => $procData['subject_idIHS'],
+              'subject_idIHS' => $procData['subject_idIHS'],
               'practition_idIHS' => $procData['practition_idIHS'],
-              'rm'              => $procData['rm'],
-              'dok'             => $procData['dok'],
-              'date'            => $procData['date'],
-              'status'          => $procData['status'],
-              'created_at'      => date('Y-m-d H:i:s'),
-              'updated_at'      => date('Y-m-d H:i:s')
+              'rm' => $procData['rm'],
+              'dok' => $procData['dok'],
+              'date' => $procData['date'],
+              'status' => $procData['status'],
+              'created_at' => date('Y-m-d H:i:s'),
+              'updated_at' => date('Y-m-d H:i:s')
             ])->execute();
 
             // echo "   > Procedure OK: " . ($procedureIhsId ?? 'FAILED') . " ({$icdList['code']})\n";
@@ -3248,7 +3358,7 @@ class SshtApiClientController extends Controller
         }
         // end foreach encounter
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(5);
@@ -3344,7 +3454,7 @@ class SshtApiClientController extends Controller
         $this->stdout("[+] medication_idIHS: {$medication_idIHS} \n");
         $this->stdout("[+] local_id: {$local_id} \n");
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       // sleep(3);
@@ -3445,10 +3555,12 @@ class SshtApiClientController extends Controller
         // exit;
 
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
@@ -3475,7 +3587,7 @@ class SshtApiClientController extends Controller
         if ($medicationRequest_idIHS) {
           $MedReqData = $resMedReq['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
             'medicationrequest_idIHS' => $medicationRequest_idIHS, // uuid
             'encounter_idIHS' => $encounterIdIHS, // uuid
 
@@ -3484,13 +3596,13 @@ class SshtApiClientController extends Controller
 
             'contained' => $MedReqData['contained'], // text
 
-            'category_code'   => $MedReqData['category_code'], // string:20
+            'category_code' => $MedReqData['category_code'], // string:20
             'category_display' => $MedReqData['category_display'], // string:30
             'category_system' => $MedReqData['category_system'], // string:191
 
-            'rm'              => $MedReqData['rm'], // string:7
-            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
-            'dok'             => $MedReqData['dok'], // string:14
+            'rm' => $MedReqData['rm'], // string:7
+            'subject_idIHS' => $MedReqData['subject_idIHS'], // string:30
+            'dok' => $MedReqData['dok'], // string:14
             'requester_idIHS' => $MedReqData['requester_idIHS'], // string:30
             // iki bagian MedicationRequest.dispenseRequest:
             'dispense_interval' => $MedReqData['dispense_interval'], // text
@@ -3503,12 +3615,12 @@ class SshtApiClientController extends Controller
             'quantity_code' => $MedReqData['quantity_code'], // string:30
             'quantity_unit' => $MedReqData['quantity_unit'], // string:30
             'quantity_value' => $MedReqData['quantity_value'], // string:20
-            'authored_on'   => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
+            'authored_on' => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
             'validity_period_start' => $MedReqData['validity_period_start'], // date (y-m-d H:i:s)
             'validity_period_end' => $MedReqData['validity_period_end'], // date (y-m-d H:i:s)
             // end bagian MedicationRequest.dispenseRequest:
             'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
-            'status'          => $MedReqData['status'], // string:30
+            'status' => $MedReqData['status'], // string:30
             'local_id' => $MedReqData['local_id'],
 
             // untuk mempermudah mapping lokal (trace)
@@ -3518,8 +3630,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_nama' => $simrs['petugas_ambil_nama'], // string:30
 
             // timestamp
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s') // timestamp nullable true
           ])->execute();
 
           echo "   > MedicationRequest OK: " . ($medicationRequest_idIHS ?? 'FAILED') . "\n";
@@ -3532,7 +3644,7 @@ class SshtApiClientController extends Controller
         sleep(3);
         // end for each obt 
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(3);
@@ -3640,10 +3752,12 @@ class SshtApiClientController extends Controller
         // print_r(json_encode($payloadMedication));
         // exit;
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
@@ -3670,7 +3784,7 @@ class SshtApiClientController extends Controller
         if ($medicationDispense_idIHS) {
           $MedReqData = $resMedReq['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
             'medicationdispense_idIHS' => $medicationDispense_idIHS, // uuid
             'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'], // uuid
             'encounter_idIHS' => $MedReqData['encounter_idIHS'], // uuid
@@ -3680,15 +3794,15 @@ class SshtApiClientController extends Controller
 
             'contained' => $MedReqData['contained'], // text
 
-            'category_code'   => $MedReqData['category_code'], // string:20
+            'category_code' => $MedReqData['category_code'], // string:20
             'category_display' => $MedReqData['category_display'], // string:30
             'category_system' => $MedReqData['category_system'], // string:191
 
-            'rm'              => $MedReqData['rm'], // string:7
-            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+            'rm' => $MedReqData['rm'], // string:7
+            'subject_idIHS' => $MedReqData['subject_idIHS'], // string:30
 
             // untuk membantu local map
-            'dok'             => $MedReqData['dok'], // string:14
+            'dok' => $MedReqData['dok'], // string:14
             'requester_idIHS' => $obt['requester_idIHS'], // string:30
 
             // iki bagian MedicationRequest.dispenseRequest:
@@ -3709,7 +3823,7 @@ class SshtApiClientController extends Controller
 
             // end bagian MedicationRequest.dispenseRequest:
             'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
-            'status'          => $MedReqData['status'], // string:30
+            'status' => $MedReqData['status'], // string:30
 
             // untuk mempermudah mapping lokal (trace)
             'petugas_idIHS' => $MedReqData['performer_idIHS'], // string:30
@@ -3717,8 +3831,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_idIHS' => $obt['petugas_ambil_idIHS'], // string:30
             'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
 
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s') // timestamp nullable true
           ])->execute();
 
           echo "   > MedicationDispense OK: " . ($medicationDispense_idIHS ?? 'FAILED') . "\n";
@@ -3732,7 +3846,7 @@ class SshtApiClientController extends Controller
         sleep(3);
         // end for each obt 
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(3);
@@ -3833,10 +3947,12 @@ class SshtApiClientController extends Controller
         // print_r(json_encode($payloadMedication));
         // exit;
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_ADMINISTRATION_CREATE),
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_ADMINISTRATION_CREATE),
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
@@ -3863,7 +3979,7 @@ class SshtApiClientController extends Controller
         if ($medicationAdministration_idIHS) {
           $MedReqData = $resMedReq['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_administration', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_administration', [
             'medicationadministration_idIHS' => $medicationAdministration_idIHS, // uuid
             // 'medicationdispense_idIHS' => $obt['medicationdispense_idIHS'], // uuid
             'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'], // uuid
@@ -3872,11 +3988,11 @@ class SshtApiClientController extends Controller
 
             'encounter_idIHS' => $MedReqData['encounter_idIHS'], // uuid
 
-            'rm'              => $MedReqData['rm'], // string:7
-            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+            'rm' => $MedReqData['rm'], // string:7
+            'subject_idIHS' => $MedReqData['subject_idIHS'], // string:30
 
             // untuk membantu local map
-            'dok'             => $MedReqData['dok'], // string:14
+            'dok' => $MedReqData['dok'], // string:14
 
             // iki bagian MedicationRequest.dispenseRequest:
             'performer_idIHS' => $MedReqData['performer_idIHS'], // string:30
@@ -3886,7 +4002,7 @@ class SshtApiClientController extends Controller
 
             "reasonCode" => $MedReqData["reasonCode"],
 
-            'status'          => $MedReqData['status'], // string:30
+            'status' => $MedReqData['status'], // string:30
 
             // untuk mempermudah mapping lokal (trace)
             'petugas_idIHS' => $MedReqData['performer_idIHS'], // string:30
@@ -3894,8 +4010,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_idIHS' => $obt['petugas_ambil_idIHS'], // string:30
             'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
 
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s') // timestamp nullable true
           ])->execute();
 
           echo "   > medicationAdministration OK: " . ($medicationAdministration_idIHS ?? 'FAILED') . "\n";
@@ -3909,7 +4025,7 @@ class SshtApiClientController extends Controller
         sleep(3);
         // endforeach   $medicationPatient
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(3);
@@ -4005,10 +4121,12 @@ class SshtApiClientController extends Controller
           // exit;
 
 
-          if (!$debugger->allow(
-            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
-            payload: $payloadMedication,
-          )) {
+          if (
+            !$debugger->allow(
+              context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+              payload: $payloadMedication,
+            )
+          ) {
             continue;
           }
 
@@ -4035,7 +4153,7 @@ class SshtApiClientController extends Controller
           if ($medicationRequest_idIHS) {
             $MedReqData = $resMedReq['data'];
 
-            \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+            Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
               'medicationrequest_idIHS' => $medicationRequest_idIHS, // uuid
               'encounter_idIHS' => $encounterIdIHS, // uuid
 
@@ -4044,13 +4162,13 @@ class SshtApiClientController extends Controller
 
               'contained' => $MedReqData['contained'], // text
 
-              'category_code'   => $MedReqData['category_code'], // string:20
+              'category_code' => $MedReqData['category_code'], // string:20
               'category_display' => $MedReqData['category_display'], // string:30
               'category_system' => $MedReqData['category_system'], // string:191
 
-              'rm'              => $MedReqData['rm'], // string:7
-              'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
-              'dok'             => $MedReqData['dok'], // string:14
+              'rm' => $MedReqData['rm'], // string:7
+              'subject_idIHS' => $MedReqData['subject_idIHS'], // string:30
+              'dok' => $MedReqData['dok'], // string:14
               'requester_idIHS' => $MedReqData['requester_idIHS'], // string:30
               // iki bagian MedicationRequest.dispenseRequest:
               'dispense_interval' => $MedReqData['dispense_interval'], // text
@@ -4063,12 +4181,12 @@ class SshtApiClientController extends Controller
               'quantity_code' => $MedReqData['quantity_code'], // string:30
               'quantity_unit' => $MedReqData['quantity_unit'], // string:30
               'quantity_value' => $MedReqData['quantity_value'], // string:20
-              'authored_on'   => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
+              'authored_on' => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
               'validity_period_start' => $MedReqData['validity_period_start'], // date (y-m-d H:i:s)
               'validity_period_end' => $MedReqData['validity_period_end'], // date (y-m-d H:i:s)
               // end bagian MedicationRequest.dispenseRequest:
               'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
-              'status'          => $MedReqData['status'], // string:30
+              'status' => $MedReqData['status'], // string:30
               'local_id' => $MedReqData['local_id'],
 
               // untuk mempermudah mapping lokal (trace)
@@ -4078,8 +4196,8 @@ class SshtApiClientController extends Controller
               'petugas_ambil_nama' => $simrs['petugas_ambil_nama'], // string:30
 
               // timestamp
-              'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-              'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+              'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+              'updated_at' => date('Y-m-d H:i:s') // timestamp nullable true
             ])->execute();
 
             echo "   > MedicationRequest OK: " . ($medicationRequest_idIHS ?? 'FAILED') . "\n";
@@ -4094,7 +4212,7 @@ class SshtApiClientController extends Controller
         sleep(4);
         // end for each obt 
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(3);
@@ -4202,10 +4320,12 @@ class SshtApiClientController extends Controller
         // print_r(json_encode($payloadMedication));
         // exit;
 
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
@@ -4232,7 +4352,7 @@ class SshtApiClientController extends Controller
         if ($medicationDispense_idIHS) {
           $MedReqData = $resMedReq['data'];
 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
             'medicationdispense_idIHS' => $medicationDispense_idIHS, // uuid
             'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'], // uuid
             'encounter_idIHS' => $MedReqData['encounter_idIHS'], // uuid
@@ -4242,15 +4362,15 @@ class SshtApiClientController extends Controller
 
             'contained' => $MedReqData['contained'], // text
 
-            'category_code'   => $MedReqData['category_code'], // string:20
+            'category_code' => $MedReqData['category_code'], // string:20
             'category_display' => $MedReqData['category_display'], // string:30
             'category_system' => $MedReqData['category_system'], // string:191
 
-            'rm'              => $MedReqData['rm'], // string:7
-            'subject_idIHS'   => $MedReqData['subject_idIHS'], // string:30
+            'rm' => $MedReqData['rm'], // string:7
+            'subject_idIHS' => $MedReqData['subject_idIHS'], // string:30
 
             // untuk membantu local map
-            'dok'             => $MedReqData['dok'], // string:14
+            'dok' => $MedReqData['dok'], // string:14
             'requester_idIHS' => $obt['requester_idIHS'], // string:30
 
             // iki bagian MedicationRequest.dispenseRequest:
@@ -4271,7 +4391,7 @@ class SshtApiClientController extends Controller
 
             // end bagian MedicationRequest.dispenseRequest:
             'dosage_instruction' => $MedReqData['dosage_instruction'], // text -> nullable true,
-            'status'          => $MedReqData['status'], // string:30
+            'status' => $MedReqData['status'], // string:30
 
             // untuk mempermudah mapping lokal (trace)
             'petugas_idIHS' => $MedReqData['performer_idIHS'], // string:30
@@ -4279,8 +4399,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_idIHS' => $obt['petugas_ambil_idIHS'], // string:30
             'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
 
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s') // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s') // timestamp nullable true
           ])->execute();
 
           echo "   > MedicationDispense OK: " . ($medicationDispense_idIHS ?? 'FAILED') . "\n";
@@ -4294,7 +4414,7 @@ class SshtApiClientController extends Controller
         sleep(3);
         // end for each obt 
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(3);
@@ -4425,15 +4545,17 @@ class SshtApiClientController extends Controller
             continue;
           }
 
-          if (!$debugger->allow(
-            context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
-            payload: $payloadMedication,
-          )) {
+          if (
+            !$debugger->allow(
+              context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
+              payload: $payloadMedication,
+            )
+          ) {
             continue;
           }
 
           // simpan task record ke db 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
             'medicationrequest_idIHS' => '', // uuid
             'medication_idIHS' => $obt['medication_idIHS'] ?? '', // uuid
             'encounter_idIHS' => $encounterIdIHS, // uuid
@@ -4447,9 +4569,9 @@ class SshtApiClientController extends Controller
             // 'category_display' => '', // string:30
             // 'category_system' => '', // string:191
 
-            'rm'              => $payloadMedication['rm'], // string:7
-            'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
-            'dok'             => $payloadMedication['dok'], // string:14
+            'rm' => $payloadMedication['rm'], // string:7
+            'subject_idIHS' => $payloadMedication['patient_idIHS'], // string:30
+            'dok' => $payloadMedication['dok'], // string:14
             'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
             // iki bagian MedicationRequest.dispenseRequest:
             // 'dispense_interval' => '', // text
@@ -4478,8 +4600,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
 
             // timestamp
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s'), // timestamp nullable true
 
             // addition send
             // 'send_at' => '',
@@ -4494,7 +4616,7 @@ class SshtApiClientController extends Controller
           print_r(json_encode($payloadMedication));
         }
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(1);
@@ -4620,16 +4742,18 @@ class SshtApiClientController extends Controller
         //   continue;
         // }
 
-        if (!$debugger->allow(
-          context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: ["message" => "test generate task medication Request: " . $payloadMedication['identifier_noresep_index']],
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
         try {
           // simpan task record ke db 
-          \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
+          Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_request', [
             'medicationrequest_idIHS' => '', // uuid
             'medication_idIHS' => $payloadMedication["medication_idIHS"] ?? "", // uuid
             'encounter_idIHS' => $encounterIdIHS, // uuid
@@ -4643,9 +4767,9 @@ class SshtApiClientController extends Controller
             // 'category_display' => '', // string:30
             // 'category_system' => '', // string:191
 
-            'rm'              => $payloadMedication['rm'], // string:7
-            'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
-            'dok'             => $payloadMedication['dok'], // string:14
+            'rm' => $payloadMedication['rm'], // string:7
+            'subject_idIHS' => $payloadMedication['patient_idIHS'], // string:30
+            'dok' => $payloadMedication['dok'], // string:14
             'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
             // iki bagian MedicationRequest.dispenseRequest:
             // 'dispense_interval' => '', // text
@@ -4674,8 +4798,8 @@ class SshtApiClientController extends Controller
             'petugas_ambil_nama' => $obt['petugas_ambil_nama'], // string:30
 
             // timestamp
-            'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-            'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+            'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+            'updated_at' => date('Y-m-d H:i:s'), // timestamp nullable true
 
             // addition send
             // 'send_at' => '',
@@ -4685,7 +4809,7 @@ class SshtApiClientController extends Controller
             // 'send_error_code' => 
 
           ])->execute();
-        } catch (\yii\db\IntegrityException $e) {
+        } catch (Yii\db\IntegrityException $e) {
           continue;
         }
 
@@ -4778,10 +4902,12 @@ class SshtApiClientController extends Controller
         // $medicationSync = $payload['local_id']
 
         // SEND TASK to SSHT
-        if (!$debugger->allow(
-          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
-          payload: $payload,
-        )) {
+        if (
+          !$debugger->allow(
+            context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+            payload: $payload,
+          )
+        ) {
           continue;
         }
 
@@ -4830,7 +4956,7 @@ class SshtApiClientController extends Controller
           $MedReqData = $resMedReq['data'];
           // else sukses 
           // 1. update record by indentifier_noresep_index
-          \Yii::$app->sshtAPIdb->createCommand()->update(
+          Yii::$app->sshtAPIdb->createCommand()->update(
             'ssht_medication_request',
             [
               'medicationrequest_idIHS' => $medicationRequest_idIHS, // uuid
@@ -4840,7 +4966,7 @@ class SshtApiClientController extends Controller
 
               'contained' => json_encode($MedReqData['contained']), // text
 
-              'category_code'   => $MedReqData['category_code'], // string:20
+              'category_code' => $MedReqData['category_code'], // string:20
               'category_display' => $MedReqData['category_display'], // string:30
               'category_system' => $MedReqData['category_system'], // string:191
 
@@ -4864,13 +4990,13 @@ class SshtApiClientController extends Controller
               'quantity_code' => $MedReqData['quantity_code'], // string:30
               'quantity_unit' => $MedReqData['quantity_unit'], // string:30
               'quantity_value' => $MedReqData['quantity_value'], // string:20
-              'authored_on'   => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
+              'authored_on' => $MedReqData['authored_on'], // date (y-m-d H:i:s) -> nullable true
               'validity_period_start' => $MedReqData['validity_period_start'], // date (y-m-d H:i:s)
               'validity_period_end' => $MedReqData['validity_period_end'], // date (y-m-d H:i:s)
               // end bagian MedicationRequest.dispenseRequest:
 
               'dosage_instruction' => json_encode($MedReqData['dosage_instruction']), // text -> nullable true,
-              'status'          => $MedReqData['status'], // string:30
+              'status' => $MedReqData['status'], // string:30
               'local_id' => $MedReqData['local_id'],
 
               // untuk mempermudah mapping lokal (trace)
@@ -4975,7 +5101,7 @@ class SshtApiClientController extends Controller
           'medicationRequest_idIHS' => $record['medicationrequest_idIHS'],
 
           'performer_idIHS' => $record['petugas_idIHS'],
-          'performer_nama'  => $record['petugas_nama'],
+          'performer_nama' => $record['petugas_nama'],
 
           "location_idIHS" => $config['location_medication_ralan_ihs'],
           "location_nama" => $config['location_medication_ralan_display'],
@@ -4999,15 +5125,17 @@ class SshtApiClientController extends Controller
           continue;
         }
 
-        if (!$debugger->allow(
-          context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
-          payload: $payloadMedication,
-        )) {
+        if (
+          !$debugger->allow(
+            context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
+            payload: $payloadMedication,
+          )
+        ) {
           continue;
         }
 
         // simpan task record ke db 
-        \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
+        Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
           'medicationdispense_idIHS' => '',
           'medication_idIHS' => $payloadMedication['medication_idIHS'] ?? '', // uuid
           'medicationrequest_idIHS' => $payloadMedication['medicationRequest_idIHS'], // uuid
@@ -5016,9 +5144,9 @@ class SshtApiClientController extends Controller
           'identifier_noresep' => $payloadMedication["identifier_noresep"],
           'identifier_noresep_index' => $payloadMedication["identifier_noresep_index"],
 
-          'rm'              => $payloadMedication['rm'], // string:7
-          'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
-          'dok'             => $payloadMedication['dok'], // string:14
+          'rm' => $payloadMedication['rm'], // string:7
+          'subject_idIHS' => $payloadMedication['patient_idIHS'], // string:30
+          'dok' => $payloadMedication['dok'], // string:14
           'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
           // iki bagian MedicationRequest.dispenseRequest:
           'local_id' => $payloadMedication['local_id'] ?? "",
@@ -5030,8 +5158,8 @@ class SshtApiClientController extends Controller
           'petugas_ambil_nama' => $record['petugas_ambil_nama'], // string:30
 
           // timestamp
-          'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-          'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+          'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+          'updated_at' => date('Y-m-d H:i:s'), // timestamp nullable true
 
           // addition send
           // 'send_at' => '',
@@ -5045,7 +5173,7 @@ class SshtApiClientController extends Controller
         echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_noresep_index'] ?? 'FAILED') . "\n";
         print_r(json_encode($payloadMedication));
       }
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       echo " ERROR: " . $e->getMessage() . "\n";
       echo "$e";
       sleep(1);
@@ -5115,22 +5243,24 @@ class SshtApiClientController extends Controller
         'medicationRequest_idIHS' => $record['medicationrequest_idIHS'],
 
         'performer_idIHS' => $record['petugas_idIHS'],
-        'performer_nama'  => $record['petugas_nama'],
+        'performer_nama' => $record['petugas_nama'],
 
         "location_idIHS" => $config['location_medication_ralan_ihs'],
         "location_nama" => $config['location_medication_ralan_display'],
       ]);
 
-      if (!$debugger->allow(
-        context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
-        payload: $payloadMedication,
-      )) {
+      if (
+        !$debugger->allow(
+          context: ["message" => "test generate task medication Dispense: " . $payloadMedication['identifier_noresep_index']],
+          payload: $payloadMedication,
+        )
+      ) {
         continue;
       }
 
       try {
         // simpan task record ke db 
-        \Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
+        Yii::$app->sshtAPIdb->createCommand()->insert('ssht_medication_dispense', [
           'medicationdispense_idIHS' => '',
           'medication_idIHS' => $payloadMedication['medication_idIHS'] ?? '', // uuid
           'medicationrequest_idIHS' => $payloadMedication['medicationRequest_idIHS'], // uuid
@@ -5139,9 +5269,9 @@ class SshtApiClientController extends Controller
           'identifier_noresep' => $payloadMedication["identifier_noresep"],
           'identifier_noresep_index' => $payloadMedication["identifier_noresep_index"],
 
-          'rm'              => $payloadMedication['rm'], // string:7
-          'subject_idIHS'   => $payloadMedication['patient_idIHS'], // string:30
-          'dok'             => $payloadMedication['dok'], // string:14
+          'rm' => $payloadMedication['rm'], // string:7
+          'subject_idIHS' => $payloadMedication['patient_idIHS'], // string:30
+          'dok' => $payloadMedication['dok'], // string:14
           'requester_idIHS' => $payloadMedication['practition_idIHS'], // string:30
           // iki bagian MedicationRequest.dispenseRequest:
           'local_id' => $payloadMedication['local_id'] ?? "",
@@ -5153,8 +5283,8 @@ class SshtApiClientController extends Controller
           'petugas_ambil_nama' => $record['petugas_ambil_nama'], // string:30
 
           // timestamp
-          'created_at'      => date('Y-m-d H:i:s'), //  timestamp nullable true 
-          'updated_at'      => date('Y-m-d H:i:s'), // timestamp nullable true
+          'created_at' => date('Y-m-d H:i:s'), //  timestamp nullable true 
+          'updated_at' => date('Y-m-d H:i:s'), // timestamp nullable true
 
           // addition send
           // 'send_at' => '',
@@ -5167,7 +5297,7 @@ class SshtApiClientController extends Controller
 
         echo "   > MedicationRequest identifier generated: " . ($payloadMedication['identifier_noresep_index'] ?? 'FAILED') . "\n";
         print_r(json_encode($payloadMedication));
-      } catch (\yii\db\IntegrityException $e) {
+      } catch (Yii\db\IntegrityException $e) {
         continue;
       }
     }
@@ -5252,10 +5382,12 @@ class SshtApiClientController extends Controller
       // $medicationSync = $payload['local_id']
 
       // SEND TASK to SSHT
-      if (!$debugger->allow(
-        context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
-        payload: $payload,
-      )) {
+      if (
+        !$debugger->allow(
+          context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_DISPENSE_CREATE),
+          payload: $payload,
+        )
+      ) {
         continue;
       }
 
@@ -5304,7 +5436,7 @@ class SshtApiClientController extends Controller
         $MedReqData = $resMedReq['data'];
         // else sukses 
         // 1. update record by indentifier_noresep_index
-        \Yii::$app->sshtAPIdb->createCommand()->update(
+        Yii::$app->sshtAPIdb->createCommand()->update(
           'ssht_medication_dispense',
           [
             'medicationdispense_idIHS' => $medicationDispense_idIHS, // uuid
@@ -5315,7 +5447,7 @@ class SshtApiClientController extends Controller
 
             'contained' => json_encode($MedReqData['contained']), // text
 
-            'category_code'   => $MedReqData['category_code'], // string:20
+            'category_code' => $MedReqData['category_code'], // string:20
             'category_display' => $MedReqData['category_display'], // string:30
             'category_system' => $MedReqData['category_system'], // string:191
 
@@ -5331,7 +5463,7 @@ class SshtApiClientController extends Controller
             'when_handed_over' => $MedReqData['when_handed_over'], // date (y-m-d H:i:s)
 
             'dosage_instruction' => json_encode($MedReqData['dosage_instruction']), // text -> nullable true,
-            'status'          => $MedReqData['status'], // string:30
+            'status' => $MedReqData['status'], // string:30
             'local_id' => $MedReqData['local_id'],
 
             // timestamp
@@ -5354,7 +5486,7 @@ class SshtApiClientController extends Controller
         // print_r($payload);
       }
     }
-    // } catch (\Exception $e) {
+    // } catch (Exception $e) {
     //   echo " ERROR: " . $e->getMessage() . "\n";
     //   echo "$e";
     //   sleep(1);

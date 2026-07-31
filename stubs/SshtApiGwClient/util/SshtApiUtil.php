@@ -18,7 +18,8 @@ class SshtApiUtil
 
   public static function parseExpertiseRdHasilRtf($rtfContent)
   {
-    if (empty($rtfContent)) return ["", ""];
+    if (empty($rtfContent))
+      return ["", ""];
 
     try {
       // Jika data diawali format RTF, gunakan parser
@@ -68,18 +69,18 @@ class SshtApiUtil
 
     // TD
     if (preg_match('/^\s*(TD|Tensi|BP)\s*[:;]\s*(\d+)\s*\/\s*(\d+)/im', $text, $m)) {
-      $result['systolic'] = (int)$m[2];
-      $result['diastolic'] = (int)$m[3];
+      $result['systolic'] = (int) $m[2];
+      $result['diastolic'] = (int) $m[3];
     }
 
     // Heart rate - Nadi
     if (preg_match('/^\s*(N|Nadi)\s*[:;]\s*(\d+)/im', $text, $m)) {
-      $result['heart_rate'] = (int)$m[2];
+      $result['heart_rate'] = (int) $m[2];
     }
 
     // Temperature - Suhu (S)
     if (preg_match('/^\s*(S|Suhu)\s*[:;]\s*([\d.]+)/im', $text, $m)) {
-      $result['body_temp'] = (float)$m[2];
+      $result['body_temp'] = (float) $m[2];
     }
 
     // Respiration Rate / Pernafasan (RR)
@@ -89,7 +90,17 @@ class SshtApiUtil
 
     // GDS
     if (preg_match('/^\s*GDS\s*[:;]\s*(\d+)/im', $text, $m)) {
-      $result['gds'] = (int)$m[1];
+      $result['gds'] = (int) $m[1];
+    }
+
+    // Height (TB: 150 cm)
+    if (preg_match('/^\s*(TB|TINGGI\s*BADAN)\s*[:;]\s*([\d.]+)/im', $text, $m)) {
+      $result['height_cm'] = (float) $m[2];
+    }
+
+    // Weight (BB: 50 kg)
+    if (preg_match('/^\s*(BB|BERAT\s*BADAN)\s*[:;]\s*([\d.]+)/im', $text, $m)) {
+      $result['weight_kg'] = (float) $m[2];
     }
 
     // // // SpO2
@@ -111,7 +122,7 @@ class SshtApiUtil
   {
     if ($index == 0) {
       $codedate = Carbon::parse($tgl_param)->format('Ymd');
-      $idnresep = (string)$codedate . '-' . (string) $resep_param;
+      $idnresep = (string) $codedate . '-' . (string) $resep_param;
 
       return (object) [
         "identifier_resep" => $idnresep,

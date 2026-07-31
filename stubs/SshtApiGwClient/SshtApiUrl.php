@@ -263,7 +263,7 @@ class SshtApiUrl
    *    "speciment_idIHS": "string|uuid (required) - id specimen SATUSEHAT",
    *    "sampelID_TestID": "string|alpha_dash (required) - identifier sampel dan test",
    *    "rm": "string|alpha_dash (required) - nomor rekam medis",
-   *    "laborat": "string|alpha_dash (required) - kode laboratorium",
+   *    "laborat": "string|alpha_dash (required) - kode ihs petugas laboratorium",
    *
    *    "scale": "string|alpha (required) - skala hasil observasi (quantitative | ordinal | nominal | narrative)",
    *
