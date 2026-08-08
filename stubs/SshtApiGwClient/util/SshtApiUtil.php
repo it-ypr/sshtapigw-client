@@ -122,11 +122,11 @@ class SshtApiUtil
   {
     if ($index == 0) {
       $codedate = Carbon::parse($tgl_param)->format('Ymd');
-      $idnresep = (string) $codedate . '-' . (string) $resep_param;
+      $idnresep = (string)$codedate . '-' . (string) $resep_param;
 
       return (object) [
-        "identifier_resep" => $idnresep,
-        "identifier_resep_index" => $idnresep . "-" . "1"
+        "identifier_noresep" => $idnresep,
+        "identifier_noresep_index" => $idnresep . "-" . "1"
       ];
     }
 
@@ -134,8 +134,8 @@ class SshtApiUtil
     $idnresep = $codedate . '-' . (string) $resep_param;
 
     return (object) [
-      "identifier_resep" => $idnresep,
-      "identifier_resep_index" => $idnresep . "-" . (string) $index + 1
+      "identifier_noresep" => $idnresep,
+      "identifier_noresep_index" => $idnresep . "-" . (string) $index + 1
     ];
   }
 
@@ -143,7 +143,7 @@ class SshtApiUtil
     string $kali = '', // 3 , 1-2 , 2
     string $hari = '', // 1 , 10, OLES
     string $sediaan = '', // tablet, ML , salep
-    string $waktu = '' // sesudah makan, Sesudah makan, 
+    string $waktu = '' // sesudah makan, Sesudah makan,
   ): string {
     if (empty(trim($kali)) && empty(trim($hari))) {
       return "-";
@@ -166,15 +166,15 @@ class SshtApiUtil
     return (string) $dosisFrekuensi[0];
   }
 
-  // rule: hari tidak boleh kosong, kalau bentukan pecahan harus pake decimal 0.x 
+  // rule: hari tidak boleh kosong, kalau bentukan pecahan harus pake decimal 0.x
   // public static function parseDosisHarianLocal(string $hari)
   // {
   //   // 1. cek kosong atau tidak -> 1
   //   // 2. cek ada alfabeth -> 1
-  //   // 3. cek apakah data hanya "-" 
+  //   // 3. cek apakah data hanya "-"
   //   // 3.1. true -> 1
   //   // 4. cek apakah string length lebih dari 2, dan ada "/" (untuk string pecahan)
   //   // 4.1. true -> parse jadi float
-  //   // 5. return float 
+  //   // 5. return float
   // }
 }
