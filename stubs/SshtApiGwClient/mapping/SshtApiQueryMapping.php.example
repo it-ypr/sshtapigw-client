@@ -386,20 +386,20 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'ldp.nama',
         'lm.kode_rs',
         'lm.loinc_code',
-        'll.display as loinc_display',
-        // 'll.kategori_kelompok_pemeriksaan',
-        // 'll.nama_pemeriksaan',
-        'll.permintaan_hasil',
-        'll.tipe_hasil_pemeriksaan',
-        'll.spesimen',
-        'll.specimen_code',
-        'ss.display as specimen_display',
+        // 'll.display as loinc_display',
+        // // 'll.kategori_kelompok_pemeriksaan',
+        // // 'll.nama_pemeriksaan',
+        // 'll.permintaan_hasil',
+        // 'll.tipe_hasil_pemeriksaan',
+        // 'll.spesimen',
+        // 'll.specimen_code',
+        // 'ss.display as specimen_display',
       ])
       ->from(['lop' => 'lab_order_poli'])
       ->innerJoin(['ldp' => 'lab_daftar_periksa'], 'lop.kode = ldp.kode')
       ->innerJoin(['lm' => 'loinc_map'], 'ldp.kode = lm.kode_rs')
-      ->innerJoin(['ll' => 'loinc_lab'], 'lm.loinc_code = ll.code')
-      ->innerJoin(['ss' => 'snomed_specimen'], 'll.specimen_code = ss.code')
+      // ->innerJoin(['ll' => 'loinc_lab'], 'lm.loinc_code = ll.code')
+      // ->innerJoin(['ss' => 'snomed_specimen'], 'll.specimen_code = ss.code')
       ->where([
         'lop.tanggal' => $tanggal,
         'lop.rm' => $rm,
@@ -409,6 +409,32 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     if (!$result1 || !$result2) {
       return false;
+    }
+
+    // get Loinc lab & speciment dari dbterminologi:
+    $loincCodes = array_unique(array_column($result2, 'loinc_code'));
+
+    $loincRows = (new Query())
+      ->from('loinc_lab')
+      ->where(['code' => $loincCodes])
+      ->all(Yii::$app->dbsshtterminologi);
+
+    $loincMap = [];
+    $specimenCodes = [];
+
+    foreach ($loincRows as $row) {
+      $loincMap[$row['code']] = $row;
+      $specimenCodes[] = $row['specimen_code'];
+    }
+
+    $specimenRows = (new Query())
+      ->from('snomed_specimen')
+      ->where(['code' => array_unique($specimenCodes)])
+      ->all(Yii::$app->dbsshtterminologi);
+
+    $specimenMap = [];
+    foreach ($specimenRows as $row) {
+      $specimenMap[$row['code']] = $row;
     }
 
     // $first = $result1[0]; // get first data for prerequisites
@@ -425,19 +451,29 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     $labResult = [];
     foreach ($result2 as $row) {
+
+      // join data loinc lab & specimen
+      $loinc = $loincMap[$row['loinc_code']] ?? [];
+      $specimen = $specimenMap[$loinc['specimen_code'] ?? ''] ?? [];
+
       $labResult[] = [
         'svc_req' => [
           'nama_lokal' => $row['nama'],
           'service_req_code' => $result1['NoTest'] . 'Q' . $row['kode_rs'],
           'loinc_order_code' => $row['loinc_code'],
-          'loinc_order_display' => $row['loinc_display'],
+          'loinc_order_display' => $loinc['display'] ?? null,
+          // 'loinc_order_display' => $row['loinc_display'],
           'kategori' => 'lab',
         ],
         'specimen' => [
-          'sample_id' => $result1['NoTest'] . '-' . $row['specimen_code'],
-          'specimen_code' => $row['specimen_code'],
-          'specimen_display' => $row['specimen_display'],
-          'sampling_method' => $row['spesimen'],
+          // 'sample_id' => $result1['NoTest'] . '-' . $row['specimen_code'],
+          // 'specimen_code' => $row['specimen_code'],
+          // 'specimen_display' => $row['specimen_display'],
+          // 'sampling_method' => $row['spesimen'],
+          'sample_id' => $result1['NoTest'] . '-' . ($loinc['specimen_code'] ?? ''),
+          'specimen_code' => $loinc['specimen_code'] ?? null,
+          'specimen_display' => $specimen['display'] ?? null,
+          'sampling_method' => $loinc['spesimen'] ?? null,
         ],
       ];
     }
@@ -474,7 +510,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'fbio.tanggal',
         'fbio.kddokter',
         'fr.resep as fr_resep',
-        'rob.id_local',
+        // 'rob.id_local',
+        'lg.Id as id_local',
+        'rob.medication_idIHS',
         'lg.kode_brg',
         'lg.nama',
         'rob.kfa_code',
@@ -482,6 +520,8 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'fr.jumlah',
         'fr.kali',
         'fr.hari',
+        'fr.sediaan',
+        'fr.waktu',
         'rob.kfa_bza',
         'rob.kfa_ucum',
         'rob.kfa_uom',
@@ -511,7 +551,6 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $data;
   }
 
-
   public static function getRefObatByLocalId(string $localid)
   {
     $db1 = Yii::$app->db;
@@ -520,8 +559,10 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->select([
         'rob.Id',
         'rob.id_local',
+        'rob.medication_idIHS',
         'rob.kfa_code',
         'rob.kfa_display',
+        'rob.kfa_system',
         'rob.kfa_bza',
         'rob.kfa_form',
         'rob.kfa_route'
@@ -561,6 +602,10 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ])
       ->one(Yii::$app->db);
 
+    if (!$result1) {
+      return false;
+    }
+
     // query 2
     $result2 = (new Query())
       ->select([
@@ -574,25 +619,64 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'lmh.id_lab',
         'lmh.loinc_code',
         'llo.loinc_order_code',
-        'll.nama_pemeriksaan',
-        'll.spesimen',
-        'll.display',
-        'll.tipe_hasil_pemeriksaan as scale',
-        'll.metode_analisis as metode',
+        // 'll.nama_pemeriksaan',
+        // 'll.spesimen',
+        // 'll.display',
+        // 'll.tipe_hasil_pemeriksaan as scale',
+        // 'll.metode_analisis as metode',
       ])
       ->from(['lh' => 'lis_hasil'])
       ->innerJoin(['lmh' => 'loinc_map_hasil'], 'lh.TEST_ID = lmh.id_lab')
       ->innerJoin(['llo' => 'loinc_lab_order'], 'lmh.loinc_code = llo.loinc_code')
-      ->innerJoin(['ll' => 'loinc_lab'], 'lmh.loinc_code = ll.code')
+      // ->innerJoin(['ll' => 'loinc_lab'], 'lmh.loinc_code = ll.code')
       ->where([
         'lh.SAMPEL_ID' => $result1['NoTest'],
         'llo.loinc_order_code' => $loinc_order,
       ])
       ->all(Yii::$app->db);
 
-    $data = $result2;
-    if (!$data) {
+    // get Loinc lab & speciment dari dbterminologi:
+    $loincCodes = array_unique(array_column($result2, 'loinc_code'));
+
+    $loincRows = (new Query())
+      ->from('loinc_lab')
+      ->where(['code' => $loincCodes])
+      ->all(Yii::$app->dbsshtterminologi);
+
+    $loincMap = [];
+
+    foreach ($loincRows as $row) {
+      $loincMap[$row['code']] = $row;
+    }
+
+    // $data = $result2;
+
+    if (!$result2) {
       return false;
+    }
+
+    // Merge data terminologi ke hasil query
+    $data = [];
+
+    foreach ($result2 as $row) {
+
+      // join loinc data
+      $loinc = $loincMap[$row['loinc_code']] ?? [];
+
+      // require..
+      // 'll.nama_pemeriksaan',
+      // 'll.spesimen',
+      // 'll.display',
+      // 'll.tipe_hasil_pemeriksaan as scale',
+      // 'll.metode_analisis as metode',
+
+      $data[] = array_merge($row, [
+        'nama_pemeriksaan' => $loinc['nama_pemeriksaan'] ?? null,
+        'spesimen' => $loinc['spesimen'] ?? null,
+        'display' => $loinc['display'] ?? null,
+        'scale' => $loinc['tipe_hasil_pemeriksaan'] ?? null,
+        'metode' => $loinc['metode_analisis'] ?? null,
+      ]);
     }
 
     return $data;
