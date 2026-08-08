@@ -1305,49 +1305,25 @@ class SshtApiClientController extends Controller
     echo "\n--- TASK BOT DONE ---\n";
   }
 
-  public function actionSendCondition($tgl_param)
-  {
-  }
+  public function actionSendCondition($tgl_param) {}
 
-  public function actionSendObservationVitalTd($tgl_param)
-  {
-  }
+  public function actionSendObservationVitalTd($tgl_param) {}
 
-  public function actionSendObservationVitalNapas($tgl_param)
-  {
-  }
+  public function actionSendObservationVitalNapas($tgl_param) {}
 
-  public function actionSendObservationVitalSuhu($tgl_param)
-  {
-  }
+  public function actionSendObservationVitalSuhu($tgl_param) {}
 
-  public function actionSendAllergy($tgl_param)
-  {
-  }
+  public function actionSendAllergy($tgl_param) {}
 
-  public function actionSendCompositionDiet($tgl_param)
-  {
-  }
+  public function actionSendCompositionDiet($tgl_param) {}
 
-  public function actionSendServiceRequestEkg($tgl_param)
-  {
-  }
-  public function actionSendServiceRequestEco($tgl_param)
-  {
-  }
-  public function actionSendServiceRequestNebulasi($tgl_param)
-  {
-  }
+  public function actionSendServiceRequestEkg($tgl_param) {}
+  public function actionSendServiceRequestEco($tgl_param) {}
+  public function actionSendServiceRequestNebulasi($tgl_param) {}
 
-  public function actionSendProcedureDanObservationEkg($tgl_param)
-  {
-  }
-  public function actionSendProcedureDanObservationEco($tgl_param)
-  {
-  }
-  public function actionSendProcedureDanObservationNebulasi($tgl_param)
-  {
-  }
+  public function actionSendProcedureDanObservationEkg($tgl_param) {}
+  public function actionSendProcedureDanObservationEco($tgl_param) {}
+  public function actionSendProcedureDanObservationNebulasi($tgl_param) {}
 
 
   /**
@@ -2405,9 +2381,7 @@ class SshtApiClientController extends Controller
     // end sendSpecimentRalanSingle()
   }
 
-  public function actionSendSpecimentRalanSingle(string $tgl_param, string $rm)
-  {
-  }
+  public function actionSendSpecimentRalanSingle(string $tgl_param, string $rm) {}
 
   /**
    * Run Cron: php yii ssht-api-client/send-service-request-and-speciment-lab-ralan 2026-05-01
@@ -2528,7 +2502,7 @@ class SshtApiClientController extends Controller
               'dok' => $data_api['dok'] ?? null,
               'date' => $data_api['date'],
               'status' => 'active',
-              'crated_at' => $now, // for insert
+              'created_at' => $now, // fix typo..
               'updated_at' => $now,
               'srid' => $data_api['srid'],
 
@@ -2543,7 +2517,8 @@ class SshtApiClientController extends Controller
             //   // 'encounter_idIHS' => $enc['idIHS']
             // ]
           )->execute();
-          $this->stdout("[+] Sukses ServiceRequest Lab: {json_encode($payload)}, Rm: {$rm}, ServiceRequest: {$sr_id_ihs} \n");
+          $jsonencodepayload = json_encode($payload);
+          $this->stdout("[+] Sukses ServiceRequest Lab: {$jsonencodepayload}, Rm: {$rm}, ServiceRequest: {$sr_id_ihs} \n");
 
           // 2026-07-09 14:52 - Moving this to up after saving payload serviceRequest to db, so you could easy to digest this crap code..
 
@@ -2555,6 +2530,7 @@ class SshtApiClientController extends Controller
             "encounter_idIHS" => $enc["idIHS"],
             "speciment_code" => $lab["specimen"]["specimen_code"],
             "speciment_display" => $lab["specimen"]["specimen_display"],
+            // 2026-08-06 17:01:00 - mapping sampling_method jika sudah mau all resource, sekarang baru termaping: sampling_method untuk darah, urin & feces
             "sampling_method" => $lab["specimen"]["sampling_method"],
             "rm" => $rm,
             "dok" => $enc['practition_lokalid'],
@@ -2603,15 +2579,9 @@ class SshtApiClientController extends Controller
     }
   }
 
-  public function actionSendServiceRequestLab($tgl_param)
-  {
-  }
-  public function actionSendSpecimentLab($tgl_param)
-  {
-  }
-  public function actionSendObservationDanDiagnosticReportLab($tgl_param)
-  {
-  }
+  public function actionSendServiceRequestLab($tgl_param) {}
+  public function actionSendSpecimentLab($tgl_param) {}
+  public function actionSendObservationDanDiagnosticReportLab($tgl_param) {}
 
   /**
    * Run Cron: php yii ssht-api-client/send-service-request-radio 2026-05-01
@@ -3110,6 +3080,8 @@ class SshtApiClientController extends Controller
           'heart_rate' => 'nadi',
           'body_temp' => 'suhu',
           'respiratory_rate' => 'nafas',
+          'height_cm' => 'tb',
+          'weight_kg' => 'bb',
         ];
 
         $obsdata = $simrsobs['observation_data'];
@@ -4632,6 +4604,8 @@ class SshtApiClientController extends Controller
    */
   public function actionGenerateMedicationRequestRalan(string $tgl_param)
   {
+    print_r("Generate MedicationRequest {$tgl_param} :\n");
+
     $dbLocal = Yii::$app->sshtAPIdb;
 
     $config = SshtApiBase::getConfig();
@@ -4663,10 +4637,10 @@ class SshtApiClientController extends Controller
       return;
     }
 
-    print_r("Data array encounter:\n");
-    print_r($encounter[0]);
-    print_r($encounter[1]);
-    print_r("...\n");
+    // print_r("Data array encounter:\n");
+    // print_r($encounter[0]);
+    // print_r($encounter[1]);
+    // print_r("...\n");
 
     foreach ($encounter as $key => $record) {
 
@@ -4681,9 +4655,11 @@ class SshtApiClientController extends Controller
         continue;
       }
 
-      print_r($simrs);
+      // print_r($simrs);
 
       foreach ($simrs as $key => $obt) {
+
+        print_r($obt);
 
         $identifier_resep = SshtApiUtil::genIdentifierResepMedication($tgl_param, $obt['resep'], $key);
 
