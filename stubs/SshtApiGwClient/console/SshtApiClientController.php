@@ -218,7 +218,7 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
-    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
+    echo "--- TASK SSHT START Encounter & Diagnosa (Ralan): [" . $tgl_param . "] ---\n";
 
     $dataEncounter = SshtApiQueryMapping::queryEncounterRalanSimrs($tgl_param);
 
@@ -435,7 +435,7 @@ class SshtApiClientController extends Controller
       sleep(2);
     }
 
-    echo "\n--- TASK BOT DONE: " . $tgl_param . " ---\n";
+    echo "\n--- TASK DONE: " . $tgl_param . " ---\n";
     // return ExitCode::OK;
   }
 
@@ -450,7 +450,7 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
-    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
+    echo "--- TASK SSHT START: " . $tgl_param . " ---\n";
 
     $dataEncounter = SshtApiQueryMapping::queryEncounterUgdSimrs($tgl_param);
 
@@ -610,7 +610,7 @@ class SshtApiClientController extends Controller
       sleep(2);
     }
 
-    echo "\n--- TASK BOT DONE: " . $tgl_param . " ---\n";
+    echo "\n--- TASK DONE: " . $tgl_param . " ---\n";
   }
 
 
@@ -619,8 +619,8 @@ class SshtApiClientController extends Controller
    */
   public function actionSendEncounterRanap($tgl_param)
   {
-    echo "--- TASK BOT SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
-    echo "\n--- TASK BOT DONE ---\n";
+    echo "--- TASK SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
+    echo "\n--- TASK DONE ---\n";
   }
 
 
@@ -635,7 +635,7 @@ class SshtApiClientController extends Controller
     $debugger = new SshtApiDebugger(
       enabled: $config['debug']
     );
-    echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
+    echo "--- TASK SSHT EncounterFinish START: " . $tgl_param . " ---\n";
     $encounter = (new Query())
       ->select([
         'idIHS',
@@ -901,7 +901,7 @@ class SshtApiClientController extends Controller
         sleep(2);
         // end foreach $encounter single
       }
-      echo "\n--- TASK BOT DONE ---\n";
+      echo "\n--- TASK DONE ---\n";
       // end actionSendEncounterFinishRalanSingle($tgl_param, $rm_param)
     }
   }
@@ -923,7 +923,7 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
-    echo "--- TASK BOT SSHT EncounterFinish (LOCAL RANK) START: {$tgl_param} ---\n";
+    echo "--- TASK SSHT EncounterFinish (LOCAL RANK) START: {$tgl_param} ---\n";
 
     $encounters = (new Query())
       ->select([
@@ -1109,7 +1109,7 @@ class SshtApiClientController extends Controller
       sleep(2);
     }
 
-    echo "\n--- TASK BOT DONE ---\n";
+    echo "\n--- TASK DONE ---\n";
   }
 
   /**
@@ -1123,7 +1123,7 @@ class SshtApiClientController extends Controller
     $debugger = new SshtApiDebugger(
       enabled: $config['debug']
     );
-    echo "--- TASK BOT SSHT EncounterFinish START: " . $tgl_param . " ---\n";
+    echo "--- TASK SSHT EncounterFinish START: " . $tgl_param . " ---\n";
     $encounter = (new Query())
       ->select([
         'idIHS',
@@ -1302,7 +1302,7 @@ class SshtApiClientController extends Controller
       }
       // end foreach $encounter record
     }
-    echo "\n--- TASK BOT DONE ---\n";
+    echo "\n--- TASK DONE ---\n";
   }
 
   public function actionSendCondition($tgl_param) {}
@@ -1805,6 +1805,7 @@ class SshtApiClientController extends Controller
   public function actionSendObservationLabRalan(
     string $tgl_param
   ) {
+    echo "--- TASK SSHT Observation Lab (Ralan): [" . $tgl_param . "] ---\n";
     $class = 'AMB';
 
     $dbLocal = Yii::$app->sshtAPIdb;
@@ -2150,6 +2151,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendDiagnosticReportLabRalan(string $tgl_param)
   {
+    echo "--- TASK SSHT DiagnosticReport Lab (Ralan): [" . $tgl_param . "] ---\n";
     $class = 'AMB';
 
     $dbLocal = Yii::$app->sshtAPIdb;
@@ -2388,6 +2390,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendServiceRequestAndSpecimentLabRalan(string $tgl_param)
   {
+    echo "--- TASK SSHT ServiceRequest & Specimen Lab (Ralan): [" . $tgl_param . "] ---\n";
     $class = 'AMB';
 
     $dbLocal = Yii::$app->sshtAPIdb;
@@ -2596,6 +2599,8 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
+    echo "--- TASK SSHT ServiceRequest Radio (Ralan): [" . $tgl_param . "] ---\n";
+
     try {
       // 1. Ambil data encounter dari DB Lokal
       $encounters = (new Query())
@@ -2704,6 +2709,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudy($tgl_param)
   {
+    echo "--- TASK SSHT ImagingStudy Radio (Ralan): [" . $tgl_param . "] ---\n";
     $dbLocal = Yii::$app->sshtAPIdb;
     $config = SshtApiBase::getConfig();
     $orthancUrl = $config["orthanc_url"]; // Sesuaikan URL Orthanc
@@ -2823,6 +2829,8 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
+    echo "--- TASK SSHT Observation & DiagnosticReport Radio (Ralan): [" . $tgl_param . "] ---\n";
+
     try {
       $this->stdout("[*] Menarik data imaging tanggal: {$tgl_param}...\n");
 
@@ -2881,6 +2889,8 @@ class SshtApiClientController extends Controller
               ->from('ssht_observation')
               ->where(['rm' => $row['rm']])
               ->andWhere(['like', 'date', $tgl_param])
+              ->andWhere(['category_code' => 'imaging']) // 2026-08-15 - fix multiple result
+              ->andWhere(['obs_valueString' => $obsText]) // 2026-08-15 - fix multiple result
               ->exists($dbLocal);
 
             if (!$checkObs) {
@@ -2946,6 +2956,8 @@ class SshtApiClientController extends Controller
               ->from('ssht_diagnosticreport')
               ->where(['rm' => $row['rm']])
               ->andWhere(['like', 'date', $tgl_param])
+              ->andWhere(['category_code' => 'RAD']) // 2026-08-15 - fix multiple result
+              ->andWhere(['servicerequest_idIHS' => $srIdIhs]) // 2026-08-15 - fix multiple result
               ->exists($dbLocal);
 
             if (!$checkDr) {
@@ -3030,6 +3042,8 @@ class SshtApiClientController extends Controller
     $debugger = new SshtApiDebugger(
       enabled: $config['debug']
     );
+
+    echo "--- TASK SSHT Observation General (RALAN): [" . $tgl_param . "] ---\n";
 
     try {
 
@@ -3190,7 +3204,7 @@ class SshtApiClientController extends Controller
       enabled: $config['debug']
     );
 
-    echo "--- TASK BOT SSHT START: " . $tgl_param . " ---\n";
+    echo "--- TASK SSHT Procedure General (Ralan): [" . $tgl_param . "] ---\n";
 
     try {
 
@@ -3341,7 +3355,7 @@ class SshtApiClientController extends Controller
   }
 
   /**
-   * php yii ssht-api-client/sync-refobatbriging-medication-single
+   * php yii ssht-api-client/sync-refobatbriging-medication-single <kode_lokal_id_obat>
    */
   public function actionSyncRefobatbrigingMedicationSingle($local_id)
   {
@@ -4604,7 +4618,7 @@ class SshtApiClientController extends Controller
    */
   public function actionGenerateMedicationRequestRalan(string $tgl_param)
   {
-    print_r("Generate MedicationRequest {$tgl_param} :\n");
+    print_r("--- TASK SSHT Generate MedicationRequest (Ralan): [{$tgl_param}] ---\n");
 
     $dbLocal = Yii::$app->sshtAPIdb;
 
