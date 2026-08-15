@@ -1,0 +1,23 @@
+CREATE TABLE `ssht_encounter` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `idIHS` char(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `subject_rm` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `subject_idIHS` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `subject_nama` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `practition_idIHS` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `practition_lokalid` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `practition_nama` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `location_idIHS` char(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `location_nama` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `organization_idIHS` char(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
+  `arrived_start` datetime NOT NULL,
+  `arrived_end` datetime NOT NULL,
+  `inprogress_start` datetime DEFAULT NULL,
+  `inprogress_end` datetime DEFAULT NULL,
+  `finish_start` datetime DEFAULT NULL,
+  `finish_end` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `class` varchar(10) COLLATE utf8mb3_unicode_ci DEFAULT NULL COMMENT 'AMB=ralan,IMP=ranap,EMER=ugd',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci;
