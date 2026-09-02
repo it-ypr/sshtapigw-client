@@ -714,14 +714,16 @@ class SshtApiClientController extends Controller
         try {
 
           $getconditionsSimrs = (new Query())
-            ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+            // ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+            ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as mpoli_ihs'])
             ->from('mr_kunjungan k')
             ->leftJoin('mpoli', 'k.poli = mpoli.poli')
             ->where([
               'k.rm' => $record['subject_rm'],
               'k.dokter' => $record['practition_lokalid'],
               'k.tanggal' => $tgl_param,
-              'mpoli.idihs' => $record['location_idIHS'],
+              // 'mpoli.idihs' => $record['location_idIHS'],
+              'mpoli.' . SshtApiQueryMapping::MPOLI_IHS => $record['location_idIHS'],
             ])
             ->orderBy("Id ASC")
             ->all($dbSimrs);
@@ -1198,14 +1200,16 @@ class SshtApiClientController extends Controller
         $dbSimrs = Yii::$app->db;
 
         $getconditionsSimrs = (new Query())
-          ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+          // ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.idihs'])
+          ->select(['k.Id', 'k.rm', 'k.icd', 'k.dokter', 'k.poli', 'mpoli.' . SshtApiQueryMapping::MPOLI_IHS])
           ->from('mr_kunjungan k')
           ->leftJoin('mpoli', 'k.poli = mpoli.poli')
           ->where([
             'k.rm' => $record['subject_rm'],
             'k.dokter' => $record['practition_lokalid'],
             'k.tanggal' => $tgl_param,
-            'mpoli.idihs' => $record['location_idIHS'],
+            // 'mpoli.idihs' => $record['location_idIHS'],
+            'mpoli.' . SshtApiQueryMapping::MPOLI_IHS => $record['location_idIHS'],
           ])
           ->orderBy("Id ASC")
           ->all($dbSimrs);
@@ -2641,7 +2645,8 @@ class SshtApiClientController extends Controller
           "encounter_idIHS" => $enc['idIHS'],
           "dokter" => trim($simrs['dkirim']),
           "rm" => $rm,
-          "petugas_idIHS" => $simrs['idssht'] ?? "",
+          // "petugas_idIHS" => $simrs['idssht'] ?? "",
+          "petugas_idIHS" => $simrs['petugas_ihs'] ?? "",
           "petugas_nama" => trim($simrs['nm_user'] ?? "")
         ];
 
