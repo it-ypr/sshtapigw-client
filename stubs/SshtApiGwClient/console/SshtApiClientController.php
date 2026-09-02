@@ -1864,6 +1864,21 @@ class SshtApiClientController extends Controller
     foreach ($serviceRequestLab as $srlab) {
       $srrm = $srlab['rm'];
 
+      if (
+        empty($srlab['servicerequest_idIHS']) ||
+        empty($srlab['speciment_idIHS'])
+      ) {
+        $this->stdout(
+          "[!] Skip anomali ServiceRequest/Specimen: " .
+            "SR: " . ($srlab['servicerequest_idIHS'] ?? '-') .
+            ", Specimen: " . ($srlab['speciment_idIHS'] ?? '-') .
+            ", Encounter: " . ($srlab['encounter_idIHS'] ?? '-') .
+            ", RM: {$srrm}, tanggal: {$tgl_param}\n"
+        );
+
+        continue;
+      }
+
       $obsLabs = SshtApiQueryMapping::getObservationLabLocalRalan(
         $tgl_param,
         $srrm,
@@ -2641,7 +2656,7 @@ class SshtApiClientController extends Controller
           "tagging" => $simrs['kode'],
           "loinc" => $simrs['loinc'] ?? "",
           "category" => "radio",
-          "reason" => $simrs['indikasi'] ?: "Permintaan Radiologi",
+          "reason" => $simrs['indikasi'] ?? "Permintaan Radiologi",
           "encounter_idIHS" => $enc['idIHS'],
           "dokter" => trim($simrs['dkirim']),
           "rm" => $rm,
@@ -3068,13 +3083,13 @@ class SshtApiClientController extends Controller
         ->all($dbLocal);
 
       // Yii::info(json_encode($encounters), 'log-send-observation-ralan-get-encounter-data');
-      print_r($encounters[0]);
-      print_r($encounters[1]);
-      print_r($encounters[2]);
-      print_r($encounters[3]);
-      print_r($encounters[4]);
+      // print_r($encounters[0]);
+      // print_r($encounters[1]);
+      // print_r($encounters[2]);
+      // print_r($encounters[3]);
+      // print_r($encounters[4]);
       echo "\n...\n";
-      echo "ditemukan " . count($encounters) . " data.\n";
+      echo "ditemukan encounter: " . count($encounters) . " data.\n";
       // exit;
 
       if (empty($encounters)) {

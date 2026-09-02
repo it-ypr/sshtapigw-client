@@ -39,9 +39,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'tblnew.dokter',
         'TRIM(muser.nm_user) as dokter_nama',
         // 'muser.idssht as dokter_ihs',
-        'muser.'.SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
         // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.'.SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
         'tblnew.poli as poli',
         "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
         'MIN(tblnew.tglperiksa) as a_end',
@@ -58,7 +58,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
       ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
       ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74', '29']]) // Filter poli
-      ->andWhere(['not', ['muser.'.SshtApiQueryMapping::MUSER_IHS => null]])
+      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
       ->groupBy('tblnew.rm')
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
   }
@@ -82,9 +82,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'tblnew.dokter',
         'TRIM(muser.nm_user) as dokter_nama',
         // 'muser.idssht as dokter_ihs',
-        'muser.'.SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
         // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.'.SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
         'tblnew.poli as poli',
         "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
         'MIN(tblnew.tglperiksa) as a_end',
@@ -101,7 +101,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
       ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
       ->andWhere(['in', 'tblnew.poli', ['29']]) // Filter poli
-      ->andWhere(['not', ['muser.'.SshtApiQueryMapping::MUSER_IHS => null]])
+      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
       ->groupBy('tblnew.rm')
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
   }
@@ -123,9 +123,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'TRIM(mr_ktp.ktp) as ktp',
         'TRIM(mmr.nama) as pasien_nama',
         'TRIM(muser.nm_user) as dokter_nama',
-        'muser.'.SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
         // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.'.SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
         'tblnew.poli as poli',
         "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan_ranap.icd) SEPARATOR ';') as icd_codes",
         // 'MIN(tblnew.tglperiksa) as a_end',
@@ -141,7 +141,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
       ->andWhere(['like', 'mr_kunjungan_ranap.tglmasuk', $tgl_param . '%', false])
       ->andWhere(['not', 'mr_ranap.tglkeluar', '0000-00-00 00:00:00'])
-      ->andWhere(['not', ['muser.'.SshtApiQueryMapping::MUSER_IHS => null]])
+      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
       ->groupBy(['mr_ranap.noregis'])
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
   }
@@ -161,7 +161,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
           'trim(rd_biodata.dperiksa) as dperiksa',
           'muser.nm_user',
           // 'muser.idssht',
-          'muser.'.SshtApiQueryMapping::MUSER_IHS.' as petugas_ihs',
+          'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as petugas_ihs',
           'rd_daftar_periksa.loinc'
         ])
         ->from('rd_order_poli')
@@ -186,7 +186,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
           'trim(rd_biodata.dperiksa) as dperiksa',
           'muser.nm_user',
           // 'muser.idssht',
-          'muser.'.SshtApiQueryMapping::MUSER_IHS.' as petugas_ihs',
+          'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as petugas_ihs',
           'rd_daftar_periksa.loinc'
         ])
         ->from('rd_order_poli')
@@ -224,7 +224,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     $dbSimrs = Yii::$app->db;
 
     return (new Query())
-      ->select(['k.Id', 'k.rm', 'k.icd', 'k.dok', 'k.poli', SshtApiQueryMapping::MPOLI_IHS])
+      ->select(['k.Id', 'k.rm', 'k.icd', 'k.dok', 'k.poli', 'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs'])
       ->from('mr_kunjungan k')
       ->leftJoin('mpoli', 'k.poli = mpoli.poli')
       ->where([
@@ -232,7 +232,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'k.dok' => $dok,
         'k.tanggal' => $tgl_param,
         // 'mpoli.idssht' => $poli_idihs,
-        'mpoli.'.SshtApiQueryMapping::MPOLI_IHS => $poli_idihs,
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS => $poli_idihs,
       ])
       ->orderBy("Id ASC")
       ->all($dbSimrs);
@@ -378,7 +378,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'lnb.NoTest',
         'lnb.d_kirim', // dokter request
         'lnb.d_nkirim', // nama dokter
-        'muser.'.SshtApiQueryMapping::MUSER_IHS . ' as petugas_ihs',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as petugas_ihs',
         'muser.nm_user as petugas_nama',
       ])
       ->from(['lnb' => 'lab_newbiodata'])
@@ -539,10 +539,10 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'rob.kfa_uom',
         'rob.kfa_route',
         'rob.kfa_form',
-        'md.'.SshtApiQueryMapping::MUSER_IHS.' as ihs_dok',
-        'mp.'.SshtApiQueryMapping::MUSER_IHS.' as ihs_petugas',
+        'md.' . SshtApiQueryMapping::MUSER_IHS . ' as ihs_dok',
+        'mp.' . SshtApiQueryMapping::MUSER_IHS . ' as ihs_petugas',
         'mp.nm_user as petugas_nama',
-        'ma.'.SshtApiQueryMapping::MUSER_IHS.' as ihs_petugas_ambil',
+        'ma.' . SshtApiQueryMapping::MUSER_IHS . ' as ihs_petugas_ambil',
         'ma.nm_user as petugas_ambil_nama'
       ])
       ->from(['fbio' => $sub])
@@ -695,4 +695,3 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $data;
   }
 }
-
