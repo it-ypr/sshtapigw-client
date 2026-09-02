@@ -1,3 +1,4 @@
 test.md
 /stubs/SshtApiGwClient/mapping/SshtApiQueryMapping.php
 .vscode
+*.backup
