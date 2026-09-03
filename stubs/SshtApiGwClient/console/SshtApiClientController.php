@@ -2,6 +2,7 @@
 
 namespace common\services\SshtApiGwClient\console;
 
+use common\services\SshtApiGwClient\extensions\SshtMedicationService;
 use common\services\SshtApiGwClient\mapping\SshtApiQueryMapping;
 use common\services\SshtApiGwClient\SshtApiBase;
 use common\services\SshtApiGwClient\SshtApiDebugger;
@@ -3379,93 +3380,125 @@ class SshtApiClientController extends Controller
    */
   public function actionSyncRefobatbrigingMedicationSingle($local_id)
   {
-    // $dbLocal = Yii::$app->sshtAPIdb;
-
-    $config = SshtApiBase::getConfig();
-
-    // $debugger = new SshtApiDebugger(
-    //   enabled: $config['debug']
-    // );
-
     try {
 
-      $getLocalObt = SshtApiQueryMapping::getRefObatByLocalId($local_id);
+      $service = new SshtMedicationService();
 
-      if (!$getLocalObt) {
-        $this->stdout("[-] tydac ada local_id tsb..\n");
-        return;
-        // continue;
-      }
+      $result = $service->syncByLocalId($local_id);
 
-      if ($getLocalObt["medication_idIHS"]) {
+      if ($result['already_mapped'] ?? false) {
         $this->stdout("[-] sudah dimaping..\n");
         return;
       }
 
-      $payloadMedication = [
-        "local_id" => (string) $getLocalObt['id_local'],
-        "kfa_code" => $getLocalObt['kfa_code'],
-        "kfa_display" => $getLocalObt['kfa_display'],
-        "kfa_bza" => json_decode($getLocalObt['kfa_bza'], true),
-        "kfa_form" => json_decode($getLocalObt['kfa_form'], true),
-        "kfa_route" => json_decode($getLocalObt['kfa_route'], true),
-      ];
-
-      // if (!$debugger->allow(
-      //   context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
-      //   payload: $payloadMedication,
-      // )) {
-      //   continue;
-      // }
-
-      // $this->stdout("[-] test..\n");
-      // exit;
-
-      $response = SshtApiBase::request(
-        SshtApiUrl::MEDICATION_CREATE,
-        [
-          'json' => $payloadMedication
-        ]
-      );
-
-      $resReq = json_decode((string) $response->getBody(), true);
-
-      if ($response->getStatusCode() == 400 && $resReq['errors']['code'] == 'duplicate') {
+      if ($result['duplicate'] ?? false) {
+        $this->stdout("[-] medication duplicate..\n");
         return;
       }
 
-      // print_r($resProcReq->getBody());
-      $this->stdout("[+] body-response: \n");
-      print_r($resReq);
-
-      $medication_idIHS = $resReq['data']['medication_idIHS'] ?? null;
-      sleep(1);
-
-      if ($medication_idIHS) {
-        // $MedReqData = $resReq['data'];
-        // simpan medication_idIHS
-        Yii::$app->db->createCommand()->update(
-          'ref_obat_briging',
-          [
-            'medication_idIHS' => $medication_idIHS,
-            'updated_at' => date('Y-m-d H:i:s'),
-          ],
-          [
-            'id_local' => $local_id,
-            'kfa_code' => $getLocalObt['kfa_code'],
-          ]
-        )->execute();
-
-        $this->stdout("[+] Sukses sync\n");
-        $this->stdout("[+] medication_idIHS: {$medication_idIHS} \n");
-        $this->stdout("[+] local_id: {$local_id} \n");
-      }
+      $this->stdout("[+] Sukses sync\n");
+      $this->stdout(
+        "[+] medication_idIHS: {$result['medication_idIHS']}\n"
+      );
+      $this->stdout(
+        "[+] local_id: {$local_id}\n"
+      );
     } catch (Exception $e) {
-      echo " ERROR: " . $e->getMessage() . "\n";
-      echo "$e";
-      // sleep(3);
+
+      $this->stdout(
+        "ERROR: {$e->getMessage()}\n"
+      );
     }
   }
+  // public function actionSyncRefobatbrigingMedicationSingle($local_id)
+  // {
+  //   // $dbLocal = Yii::$app->sshtAPIdb;
+  //
+  //   $config = SshtApiBase::getConfig();
+  //
+  //   // $debugger = new SshtApiDebugger(
+  //   //   enabled: $config['debug']
+  //   // );
+  //
+  //   try {
+  //
+  //     $getLocalObt = SshtApiQueryMapping::getRefObatByLocalId($local_id);
+  //
+  //     if (!$getLocalObt) {
+  //       $this->stdout("[-] tydac ada local_id tsb..\n");
+  //       return;
+  //       // continue;
+  //     }
+  //
+  //     if ($getLocalObt["medication_idIHS"]) {
+  //       $this->stdout("[-] sudah dimaping..\n");
+  //       return;
+  //     }
+  //
+  //     $payloadMedication = [
+  //       "local_id" => (string) $getLocalObt['id_local'],
+  //       "kfa_code" => $getLocalObt['kfa_code'],
+  //       "kfa_display" => $getLocalObt['kfa_display'],
+  //       "kfa_bza" => json_decode($getLocalObt['kfa_bza'], true),
+  //       "kfa_form" => json_decode($getLocalObt['kfa_form'], true),
+  //       "kfa_route" => json_decode($getLocalObt['kfa_route'], true),
+  //     ];
+  //
+  //     // if (!$debugger->allow(
+  //     //   context: SshtApiUtil::genDebugContext(SshtApiUrl::MEDICATION_REQUEST_CREATE),
+  //     //   payload: $payloadMedication,
+  //     // )) {
+  //     //   continue;
+  //     // }
+  //
+  //     // $this->stdout("[-] test..\n");
+  //     // exit;
+  //
+  //     $response = SshtApiBase::request(
+  //       SshtApiUrl::MEDICATION_CREATE,
+  //       [
+  //         'json' => $payloadMedication
+  //       ]
+  //     );
+  //
+  //     $resReq = json_decode((string) $response->getBody(), true);
+  //
+  //     if ($response->getStatusCode() == 400 && $resReq['errors']['code'] == 'duplicate') {
+  //       return;
+  //     }
+  //
+  //     // print_r($resProcReq->getBody());
+  //     $this->stdout("[+] body-response: \n");
+  //     print_r($resReq);
+  //
+  //     $medication_idIHS = $resReq['data']['medication_idIHS'] ?? null;
+  //     sleep(1);
+  //
+  //     if ($medication_idIHS) {
+  //       // $MedReqData = $resReq['data'];
+  //       // simpan medication_idIHS
+  //       Yii::$app->db->createCommand()->update(
+  //         'ref_obat_briging',
+  //         [
+  //           'medication_idIHS' => $medication_idIHS,
+  //           'updated_at' => date('Y-m-d H:i:s'),
+  //         ],
+  //         [
+  //           'id_local' => $local_id,
+  //           'kfa_code' => $getLocalObt['kfa_code'],
+  //         ]
+  //       )->execute();
+  //
+  //       $this->stdout("[+] Sukses sync\n");
+  //       $this->stdout("[+] medication_idIHS: {$medication_idIHS} \n");
+  //       $this->stdout("[+] local_id: {$local_id} \n");
+  //     }
+  //   } catch (Exception $e) {
+  //     echo " ERROR: " . $e->getMessage() . "\n";
+  //     echo "$e";
+  //     // sleep(3);
+  //   }
+  // }
 
   /**
    * php yii ssht-api-client/test-wrapper-send-medication-ralan-single 2026-05-01 $rm
