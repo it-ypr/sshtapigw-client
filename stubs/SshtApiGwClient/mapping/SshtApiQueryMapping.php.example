@@ -507,6 +507,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'fb.rm',
         'fb.kddokter',
         'fb.petugas',
+        'fb.id_user'
         // 'fb.id_ambil',
       ])
       ->from(['fb' => 'frm_biodata'])
