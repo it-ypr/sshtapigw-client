@@ -2237,7 +2237,7 @@ class SshtApiClientController extends Controller
         continue;
       }
 
-      if (empty($srlab['servicerequest_idIHS']) || $srlab['speciment_idIHS']) {
+      if (empty($srlab['servicerequest_idIHS']) || empty($srlab['speciment_idIHS'])) {
         $this->stdout("[!] Skip: id_ihs service request atau speciment tidak ditemukan"); // - by Joko
         continue;
       }
