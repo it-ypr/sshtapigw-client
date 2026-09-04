@@ -2237,6 +2237,11 @@ class SshtApiClientController extends Controller
         continue;
       }
 
+      if (empty($srlab['servicerequest_idIHS']) || $srlab['speciment_idIHS']) {
+        $this->stdout("[!] Skip: id_ihs service request atau speciment tidak ditemukan"); // - by Joko
+        continue;
+      }
+
       if (
         !$debugger->allow(
           context: SshtApiUtil::genDebugContext(SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB),
