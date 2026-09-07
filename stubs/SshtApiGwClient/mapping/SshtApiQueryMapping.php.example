@@ -16,8 +16,8 @@ use common\services\SshtApiGwClient\util\SshtApiUtil;
 class SshtApiQueryMapping implements SshtApiQueryRepository
 {
   // public const param mapping
-  public const string MUSER_IHS = 'idssht';
-  public const string MPOLI_IHS = 'idihs';
+  public const MUSER_IHS = 'idssht';
+  public const MPOLI_IHS = 'idihs';
 
   // query-encounter
   public static function queryEncounterRalanSimrs($tgl_param)
@@ -171,7 +171,8 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ->where([
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
-          'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
+          // config sini untuk add/exclude rd_daftar_periksa.kode
+          // 'rd_order_poli.kode' => ['01201', '01202'], 
           'rd_biodata.noregis' => ''
         ])
         ->one($dbSimrs);
@@ -196,7 +197,8 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ->where([
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
-          'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
+          // config sini untuk add/exclude rd_daftar_periksa.kode
+          // 'rd_order_poli.kode' => ['01201', '01202'], 
           'rd_biodata.noregis' => ''
         ])
         ->one($dbSimrs);

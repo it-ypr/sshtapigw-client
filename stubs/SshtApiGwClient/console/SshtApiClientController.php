@@ -19,7 +19,11 @@ class SshtApiClientController extends Controller
 {
   /**
    * Run: php yii ssht-api-client/send-task-ralan 2026-05-01
-   * crontab: 30 19 * * * php yii ssht-api-client/send-task-ralan "$(date -d 'yesterday' +%Y-%m-%d)"
+   * Exp: 30 19 * * * php yii ssht-api-client/send-task-ralan "$(date -d 'yesterday' +%Y-%m-%d)"
+   * Cron:
+   * 0 13 * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/send-task-ralan "$(date -d yesterday +\%F)"'
+   * Cron dengan Log:
+   * 0 13 * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/send-task-ralan "$(date -d yesterday +\%F)"' >> /home/{direktori-log-terserah}/ssht-api-client_send-task-ralan.log 2>&1
    * cron send on (h-1) now()-1day
    */
   public function actionSendTaskRalan(string $tgl_param)
@@ -31,16 +35,25 @@ class SshtApiClientController extends Controller
     // general procedure
     $this->actionSendProcedureGeneralRalan($tgl_param);
     // serviceRequest Radiologi
-    $this->actionSendServiceRequestRadio($tgl_param);
+    $this->actionSendServiceRequestRadioRalan($tgl_param);
     // imagingStudy
-    $this->actionSendImagingStudy($tgl_param);
+    $this->actionSendImagingStudyRalan($tgl_param);
     // observation & diagnosticReport Radiologi
-    $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
+    $this->actionSendObservationDanDiagnosticReportRadioRalan($tgl_param);
     // medicationRequest & medicationDispense (inprogress)
     $this->actionGenerateMedicationRequestRalan($tgl_param);
-    // send medicationRequest & medicationDispense runing on split cron
+    // send medicationRequest manual (CLI/command prompt):
     // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
+    // send medicationRequest via cron:
+    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // send medicationRequest via cron with print logs:
+    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan >> /home/psidev/apps/logs/medication-request-$(date +\%Y-\%m-\%d).log 2>&1'
+    // send medicationDispense manual (CLI/command prompt):
     // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
+    // send medicationDispense on cron:
+    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // send medicationDispense on cron with print logs:
+    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
     // Lab - ServiceRequest & Speciment
     $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
     // Lab - Observation & DiagnosticReport (on-testing)
@@ -2612,10 +2625,11 @@ class SshtApiClientController extends Controller
   public function actionSendObservationDanDiagnosticReportLab($tgl_param) {}
 
   /**
-   * Run Cron: php yii ssht-api-client/send-service-request-radio 2026-05-01
+   * Run Cron: php yii ssht-api-client/send-service-request-radio-ralan 2026-05-01
    */
-  public function actionSendServiceRequestRadio($tgl_param)
+  public function actionSendServiceRequestRadioRalan($tgl_param)
   {
+    $class = "AMB";
     $dbLocal = Yii::$app->sshtAPIdb;
 
     $config = SshtApiBase::getConfig();
@@ -2633,6 +2647,7 @@ class SshtApiClientController extends Controller
         ->from('ssht_encounter')
         ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
         // ->andWhere(['class' => $class])
+        ->andWhere(['class' => $class])
         ->all($dbLocal);
 
       if (empty($encounters)) {
@@ -2731,9 +2746,9 @@ class SshtApiClientController extends Controller
   }
 
   /**
-   * Jalankan dengan: php yii ssht-api-client/send-imaging-study 2026-05-01
+   * Jalankan dengan: php yii ssht-api-client/send-imaging-study-ralan 2026-05-01
    */
-  public function actionSendImagingStudy($tgl_param)
+  public function actionSendImagingStudyRalan($tgl_param)
   {
     echo "--- TASK SSHT ImagingStudy Radio (Ralan): [" . $tgl_param . "] ---\n";
     $dbLocal = Yii::$app->sshtAPIdb;
@@ -2749,9 +2764,23 @@ class SshtApiClientController extends Controller
     try {
       // 1. Ambil data Service Request dari DB Lokal
       $records = (new Query())
-        ->select(['servicerequest_idIHS', 'encounter_idIHS', 'acsn', 'display', 'rm', 'patient_idIHS'])
+        ->select([
+          'ssht_servicerequest.servicerequest_idIHS as servicerequest_idIHS',
+          'ssht_servicerequest.encounter_idIHS as encounter_idIHS',
+          'ssht_servicerequest.acsn as acsn',
+          'ssht_servicerequest.display as display',
+          'ssht_servicerequest.rm as rm',
+          'ssht_servicerequest.patient_idIHS as patient_idIHS',
+          'se.class'
+        ])
         ->from('ssht_servicerequest')
-        ->where(['CAST(date AS DATE)' => $tgl_param])
+        ->leftJoin("ssht_encounter se", 'ssht_servicerequest.encounter_idIHS = se.idIHS')
+        ->where([
+          'CAST(ssht_servicerequest.date AS DATE)' => $tgl_param,
+          'ssht_servicerequest.category_display' => 'Imaging',
+          'ssht_servicerequest.category_code' => '363679005',
+          'se.class' => 'AMB',
+        ])
         ->all($dbLocal);
 
       if (empty($records)) {
@@ -2843,9 +2872,19 @@ class SshtApiClientController extends Controller
   }
 
   /**
-   * php yii ssht-api-client/send-observation-dan-diagnostic-report-radio 2026-05-01
+   * Jalankan dengan: php yii ssht-api-client/send-imaging-study-ranap 2026-05-01
    */
-  public function actionSendObservationDanDiagnosticReportRadio($tgl_param)
+  public function actionSendImagingStudyRanap($tgl_param) {}
+
+  /**
+   * Jalankan dengan: php yii ssht-api-client/send-imaging-study-ugd 2026-05-01
+   */
+  public function actionSendImagingStudyUgd($tgl_param) {}
+
+  /**
+   * php yii ssht-api-client/send-observation-dan-diagnostic-report-radio-ralan 2026-05-01
+   */
+  public function actionSendObservationDanDiagnosticReportRadioRalan($tgl_param)
   {
     $config = SshtApiBase::getConfig();
 
@@ -2871,8 +2910,9 @@ class SshtApiClientController extends Controller
 
       foreach ($items as $master) {
         $imgIdIhs = $master['idIHS'] ?? null;
-        if (!$imgIdIhs)
+        if (!$imgIdIhs) {
           continue;
+        }
 
         try {
 
@@ -2897,6 +2937,32 @@ class SshtApiClientController extends Controller
           $srIdIhs = $detailData['servicerequest_idIHS'];
           $acsnFull = $detailData['acsn'] ?? "";
           $noradio = strpos($acsnFull, '-') !== false ? explode('-', $acsnFull)[0] : $acsnFull;
+
+          // 2026-09-07 08:45 - logic guard untuk mecah case encounter.class ("ranap,ralan,ugd")
+          $cekServiceRequestImaging = (new Query())
+            ->select([
+              'ssht_servicerequest.servicerequest_idIHS as servicerequest_idIHS',
+              'ssht_servicerequest.encounter_idIHS as encounter_idIHS',
+              'ssht_servicerequest.acsn as acsn',
+              'ssht_servicerequest.display as display',
+              'ssht_servicerequest.rm as rm',
+              'ssht_servicerequest.patient_idIHS as patient_idIHS',
+              'se.class'
+            ])
+            ->from('ssht_servicerequest')
+            ->leftJoin("ssht_encounter se", 'ssht_servicerequest.encounter_idIHS = se.idIHS')
+            ->where([
+              // 'CAST(ssht_servicerequest.date AS DATE)' => $tgl_param,
+              'ssht_servicerequest.category_display' => 'Imaging',
+              'ssht_servicerequest.category_code' => '363679005',
+              'se.class' => 'AMB',
+              'ssht_servicerequest.servicerequest_idIHS' => $srIdIhs,
+            ])
+            ->exists($dbLocal);
+
+          if (!$cekServiceRequestImaging) {
+            continue;
+          }
 
           // 3. Query Hasil Expertise di SIMRS
           $row = SshtApiQueryMapping::queryObservationDanDiagnosticReportSimrsRadio($noradio);
