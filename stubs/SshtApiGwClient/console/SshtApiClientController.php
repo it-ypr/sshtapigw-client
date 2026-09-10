@@ -2801,17 +2801,20 @@ class SshtApiClientController extends Controller
         $rm_nomor = $row['rm'];
 
         // Parsing ACSN (Format: noradio-kode)
-        $parts = explode('-', $acsn_db);
-        if (count($parts) < 2) {
-          $this->stdout("  [!] Skip: Format ACSN salah pada RM {$rm_nomor}: {$acsn_db}\n");
-          continue;
-        }
+        // $parts = explode('-', $acsn_db);
+        // if (count($parts) < 2) {
+        //   $this->stdout("  [!] Skip: Format ACSN salah pada RM {$rm_nomor}: {$acsn_db}\n");
+        //   continue;
+        // }
 
-        $noradio = $parts[0];
-        $new_acsn = $acsn_db; // noradio-kode
+        // $noradio = $parts[0];
+        // $new_acsn = $acsn_db; // noradio-kode
+
+        $noradio = $acsn_db;
 
         $this->stdout("\n[*] Processing RM: {$rm_nomor} | PatientID IHS: {$patient_id_ihs}\n");
-        $this->stdout("[*] ACSN: {$noradio} -> {$new_acsn}\n");
+        // $this->stdout("[*] ACSN: {$noradio} -> {$new_acsn}\n");
+        $this->stdout("[*] ACSN: {$noradio} \n");
 
         // 2. Cari Study ID di Orthanc berdasarkan AccessionNumber lama (noradio)
         $findRes = $client->post('/tools/find', [
@@ -2831,10 +2834,10 @@ class SshtApiClientController extends Controller
 
         foreach ($studies as $study_id) {
           // 3. Modify: Buat versi baru dengan metadata lengkap (PatientID IHS & ACSN Baru)
+          // 'AccessionNumber' => $new_acsn,
           $modifyRes = $client->post("/studies/{$study_id}/modify", [
             'json' => [
               'Replace' => [
-                'AccessionNumber' => $new_acsn,
                 'PatientID' => (string) $patient_id_ihs,
               ],
               'Force' => true
@@ -2857,7 +2860,8 @@ class SshtApiClientController extends Controller
             ]);
 
             if ($storeRes->getStatusCode() == 200) {
-              $this->stdout("  [OK] Berhasil kirim ke {$dicomRouterName} dengan ACSN {$new_acsn}\n");
+              // $this->stdout("  [OK] Berhasil kirim ke {$dicomRouterName} dengan ACSN {$new_acsn}\n");
+              $this->stdout("  [OK] Berhasil kirim ke {$dicomRouterName} dengan ACSN {$noradio}\n");
             } else {
               $this->stdout("  [!] Gagal kirim ke Router: " . $storeRes->content . "\n");
             }
