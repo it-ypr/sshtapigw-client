@@ -171,8 +171,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ->where([
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
-          // config sini untuk add/exclude rd_daftar_periksa.kode
-          // 'rd_order_poli.kode' => ['01201', '01202'], 
+          // 'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add, for exclude rd_daftar_periksa.kode just comment it
           'rd_biodata.noregis' => ''
         ])
         ->one($dbSimrs);
@@ -197,8 +196,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         ->where([
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
-          // config sini untuk add/exclude rd_daftar_periksa.kode
-          // 'rd_order_poli.kode' => ['01201', '01202'], 
+          // 'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
           'rd_biodata.noregis' => ''
         ])
         ->one($dbSimrs);

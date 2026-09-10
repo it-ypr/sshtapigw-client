@@ -848,4 +848,49 @@ class SshtApiUrl
    * }
    */
   public const DASHBOARD_LOOK_DETAIL = ['POST', 'api/v1/ssht/misc/dashboard-look/view'];
+
+  public const ENCOUNTER_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/encounter/get-for-view'
+  ];
+
+  public const CONDITION_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/condition/get-for-view'
+  ];
+
+  public const PROCEDURE_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/procedure/get-for-view'
+  ];
+
+  public const OBSERVATION_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/observation/get-for-view'
+  ];
+
+  public const SERVICEREQUEST_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/service-request/get-for-view'
+  ];
+
+  public const SPECIMEN_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/speciment/get-for-view'
+  ];
+
+  public const DIAGNOSTICREPORT_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/diagnostic-report/get-for-view'
+  ];
+
+  public const MEDICATION_REQUEST_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/medication-request/get-for-view'
+  ];
+
+  public const MEDICATION_DISPENSE_GET_FOR_VIEW = [
+    'GET',
+    '/api/v1/ssht/medication-dispense/get-for-view'
+  ];
 }
