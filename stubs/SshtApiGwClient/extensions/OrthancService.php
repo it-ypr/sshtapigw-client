@@ -16,16 +16,18 @@ class OrthancService
   public function __construct()
   {
     // $config = SshtApiBase::getConfig();
-    $this->baseUrl = rtrim(
-      Config::get("services.orthanc.url"),
-      // $config["orthanc_url"],
-      // Yii::$app->params['orthanc_url'],
-      '/'
-    );
+    $config = Yii::$app->params['SSHTApiConfig'] ?? [];
+
+    $this->baseUrl = $config['orthanc_url'] ?? "";
+
+    if (!$this->baseUrl) {
+      throw new RuntimeException('Konfigurasi base URL tidak ditemukan.');
+    }
 
     $this->client = new Client([
       'base_uri' => $this->baseUrl,
-      'auth' => [Config::get("services.orthanc.auth_user"), Config::get("services.orthanc.auth_password")],
+      // 'auth' => [Config::get("services.orthanc.auth_user"), Config::get("services.orthanc.auth_password")],
+      'auth' => [$config['orthanc_auth_user'], $config['orthanc_auth_password']],
       // 'auth' => [
       //   Yii::$app->params['orthanc_auth_user'],
       //   Yii::$app->params['orthanc_auth_password'],

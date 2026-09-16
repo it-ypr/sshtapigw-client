@@ -20,7 +20,7 @@ CREATE TABLE `sshtapigw_token` (
 
 ```sh
 composer config repositories.sshtapigw-client vcs https://github.com/it-ypr/sshtapigw-client
-composer require it-ypr/sshtapigw-client:^0.3
+composer require it-ypr/sshtapigw-client:v0.3.26
 ```
 **Generate ./common/services/SshtApiGwClient:**
 
@@ -99,6 +99,10 @@ return [
     ...
     'ssht-api-client' => [
       'class' => 'common\services\SshtApiGwClient\console\SshtApiClientController',
+      // 'namespace' => 'common\services\SshtApiGwClient\console',
+    ],
+    'pacs-console' => [
+      'class' => 'common\services\SshtApiGwClient\console\PacsConsoleController',
       // 'namespace' => 'common\services\SshtApiGwClient\console',
     ],
     ...
