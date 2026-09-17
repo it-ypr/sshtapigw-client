@@ -20,7 +20,7 @@ CREATE TABLE `sshtapigw_token` (
 
 ```sh
 composer config repositories.sshtapigw-client vcs https://github.com/it-ypr/sshtapigw-client
-composer require it-ypr/sshtapigw-client:v0.3.26
+composer require it-ypr/sshtapigw-client:v0.3.27
 ```
 **Generate ./common/services/SshtApiGwClient:**
 
