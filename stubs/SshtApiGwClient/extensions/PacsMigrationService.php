@@ -643,6 +643,11 @@ class PacsMigrationService
      */
     if (!$isFirstInstance) {
       return [
+        // sauce:
+        // https://dicom.nema.org/dicom/2013/output/chtml/part04/sect_i.4.html
+        'SOPClassUID' =>
+        '1.2.840.10008.5.1.4.1.1.7',
+
         'InstanceNumber' =>
         (string) $foto->NoFoto,
       ];
@@ -678,6 +683,11 @@ class PacsMigrationService
      * Metadata utama
      */
     $tags = [
+      // sauce:
+      // https://dicom.nema.org/dicom/2013/output/chtml/part04/sect_i.4.html
+      'SOPClassUID' =>
+      '1.2.840.10008.5.1.4.1.1.7',
+
       'PatientID' =>
       (string) $biodata['rm'],
 
