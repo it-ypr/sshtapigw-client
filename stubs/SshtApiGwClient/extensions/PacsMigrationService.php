@@ -713,8 +713,14 @@ class PacsMigrationService
      * PatientSex
      */
     if (!empty($biodata['jk'])) {
-      $tags['PatientSex'] =
-        (string) $biodata['jk'];
+      $jk = strtoupper(trim((string) $biodata['jk']));
+
+      // format yang valid di orthanc pake bhs ingris (Laki-laki = M, permempuan = F)
+      if ($jk === 'L') {
+        $tags['PatientSex'] = 'M';
+      } elseif ($jk === 'P') {
+        $tags['PatientSex'] = 'F';
+      }
     }
 
     /*
