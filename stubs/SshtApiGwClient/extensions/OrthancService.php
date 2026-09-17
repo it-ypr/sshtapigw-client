@@ -37,8 +37,38 @@ class OrthancService
     ]);
   }
 
+  // /**
+  //  * Create DICOM instance from JPEG binary.
+  //  *
+  //  * @param string $imageBinary
+  //  * @param array $tags
+  //  * @param string|null $parentStudyId
+  //  *
+  //  * @return array
+  //  */
+  // public function createDicom(
+  //   string $imageBinary,
+  //   array $tags = [],
+  //   ?string $parentStudyId = null
+  // ): array {
+  //   $payload = [
+  //     'Content' => 'data:image/jpeg;base64,' . base64_encode($imageBinary),
+  //     'Tags' => $tags,
+  //   ];
+  //
+  //   if ($parentStudyId !== null) {
+  //     $payload['Parent'] = $parentStudyId;
+  //   }
+  //
+  //   $response = $this->client->post('/tools/create-dicom', [
+  //     'json' => $payload,
+  //   ]);
+  //
+  //   return $this->decodeResponse($response->getBody()->getContents());
+  // }
+
   /**
-   * Create DICOM instance from JPEG binary.
+   * Create DICOM instance from image binary.
    *
    * @param string $imageBinary
    * @param array $tags
@@ -51,8 +81,15 @@ class OrthancService
     array $tags = [],
     ?string $parentStudyId = null
   ): array {
+    $finfo = new \finfo(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo->buffer($imageBinary);
+
+    if ($mimeType === false) {
+      throw new \RuntimeException('Unable to detect image MIME type.');
+    }
+
     $payload = [
-      'Content' => 'data:image/jpeg;base64,' . base64_encode($imageBinary),
+      'Content' => 'data:' . $mimeType . ';base64,' . base64_encode($imageBinary),
       'Tags' => $tags,
     ];
 
