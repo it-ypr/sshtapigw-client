@@ -3,6 +3,7 @@
 namespace common\services\SshtApiGwClient\console;
 
 use common\services\SshtApiGwClient\extensions\PacsMigrationService;
+use common\services\SshtApiGwClient\extensions\PacsSharingService;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -75,5 +76,17 @@ class PacsConsoleController extends Controller
 
       return ExitCode::UNSPECIFIED_ERROR;
     }
+  }
+
+  public function actionMigrateSharingDicom()
+  {
+    $config = Yii::$app->params['SSHTApiConfig'] ?? [];
+    $service = new PacsSharingService(
+      $config['path_storage_sharing']
+    );
+
+    $result = $service->process();
+
+    print_r($result);
   }
 }
