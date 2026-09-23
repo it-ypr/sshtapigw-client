@@ -222,13 +222,6 @@ class PacsSharingService
     ?string $orthancStudyId,
     ?string $orthancSeriesId
   ): void {
-    /*
-     * TODO:
-     * Idempotency check sebelum create DICOM.
-     *
-     * Untuk sementara kita belum menghapus file
-     * sampai mekanisme duplicate benar-benar final.
-     */
     $imageBinary = file_get_contents(
       $file['file']
     );
@@ -259,15 +252,6 @@ class PacsSharingService
       'orthanc_series_id' => $orthancSeriesId,
     ], 'pacs-sharing');
 
-    /*
-     * Instance pertama:
-     *
-     * Parent = null
-     *
-     * Instance berikutnya:
-     *
-     * Parent = Series ID
-     */
     $response = $this->orthanc->createDicom(
       $imageBinary,
       $tags,
@@ -314,8 +298,9 @@ class PacsSharingService
       );
     }
 
-    $currentStudyId = null;
-
+    /*
+     * Validasi Study.
+     */
     $series = $this->orthanc->getSeries(
       $currentSeriesId
     );
@@ -346,11 +331,19 @@ class PacsSharingService
     }
 
     /*
-     * Kalau berhasil, file boleh dipindahkan / dihapus.
-     *
-     * Untuk sekarang kita tahan dulu sampai
-     * mekanisme idempotency selesai.
-     */
+   * Semua validasi Orthanc berhasil.
+   *
+   * Pindahkan source file ke:
+   *
+   * sharing/processed/
+   *
+   * Supaya cron berikutnya tidak memproses
+   * file yang sama lagi.
+   */
+    $this->moveToProcessed(
+      $file['file']
+    );
+
     Yii::info([
       'event' => 'pacs_sharing_file_success',
       'noradio' => $file['noradio'],
@@ -359,6 +352,62 @@ class PacsSharingService
       'orthanc_instance_id' => $orthancInstanceId,
       'orthanc_series_id' => $currentSeriesId,
       'orthanc_study_id' => $currentStudyId,
+    ], 'pacs-sharing');
+  }
+
+  /**
+   * Pindahkan file yang sudah berhasil
+   * diproses ke folder processed.
+   */
+  private function moveToProcessed(
+    string $file
+  ): void {
+    $processedPath =
+      $this->sharingPath
+      . DIRECTORY_SEPARATOR
+      . 'processed';
+
+    if (!is_dir($processedPath)) {
+      if (
+        !mkdir(
+          $processedPath,
+          0775,
+          true
+        )
+        && !is_dir($processedPath)
+      ) {
+        throw new RuntimeException(
+          "Gagal membuat folder processed: {$processedPath}"
+        );
+      }
+    }
+
+    $filename = basename($file);
+
+    $destination =
+      $processedPath
+      . DIRECTORY_SEPARATOR
+      . $filename;
+
+    /*
+   * Jangan overwrite file yang sudah ada.
+   */
+    if (file_exists($destination)) {
+      throw new RuntimeException(
+        "File tujuan sudah ada: {$destination}"
+      );
+    }
+
+    if (!rename($file, $destination)) {
+      throw new RuntimeException(
+        "Gagal memindahkan file ke: {$destination}"
+      );
+    }
+
+    Yii::info([
+      'event' => 'pacs_sharing_file_moved',
+      'source' => $file,
+      'destination' => $destination,
     ], 'pacs-sharing');
   }
 
@@ -449,13 +498,23 @@ class PacsSharingService
       )
       ->where([
         'rd_biodata.noradio' => $noradio,
-        'rd_biodata.ondelete' => '0',
+        'rd_biodata.ondelete' => 0,
+        'rdp.kondisi' => 1,
       ])
       ->one();
   }
 
   /**
    * Build DICOM tags.
+   *
+   * Instance pertama:
+   *   metadata Patient + Study + Series + Instance.
+   *
+   * Instance berikutnya:
+   *   hanya metadata instance.
+   *
+   * Metadata Study/Series pada instance berikutnya
+   * akan mengikuti Series parent di Orthanc.
    */
   private function buildDicomTags(
     array $metadata,
@@ -463,26 +522,102 @@ class PacsSharingService
     int $sequence,
     bool $isFirstInstance
   ): array {
+    /*
+   * Instance berikutnya.
+   *
+   * Jangan kirim ulang metadata Study/Series.
+   * Parent Series sudah menentukan hierarchy instance.
+   */
+    if (!$isFirstInstance) {
+      return [
+        'SOPClassUID' =>
+        '1.2.840.10008.5.1.4.1.1.7',
+
+        'InstanceNumber' =>
+        (string) $sequence,
+      ];
+    }
+
+    /*
+   * StudyDate / StudyTime
+   *
+   * Menggunakan rd_biodata.tglsave,
+   * sama seperti PacsMigrationService.
+   */
+    $studyDate = null;
+    $studyTime = null;
+
+    if (!empty($metadata['tglsave'])) {
+      $timestamp = strtotime(
+        $metadata['tglsave']
+      );
+
+      if ($timestamp !== false) {
+        $studyDate = date(
+          'Ymd',
+          $timestamp
+        );
+
+        $studyTime = date(
+          'His',
+          $timestamp
+        );
+      }
+    }
+
+    /*
+   * Metadata utama.
+   */
     $tags = [
-      'PatientID' => (string) $metadata['rm'],
-      'PatientName' => (string) $metadata['nama'],
-
-      'AccessionNumber' => $noradio,
-      'StudyID' => $noradio,
-
-      'InstanceNumber' => $sequence,
-
       'SOPClassUID' =>
       '1.2.840.10008.5.1.4.1.1.7',
+
+      'PatientID' =>
+      (string) ($metadata['rm'] ?? ''),
+
+      'PatientName' =>
+      (string) ($metadata['nama'] ?? ''),
+
+      'StudyDate' =>
+      $studyDate ?? date('Ymd'),
+
+      'StudyTime' =>
+      $studyTime ?? date('His'),
+
+      'AccessionNumber' =>
+      $noradio,
+
+      'StudyID' =>
+      $noradio,
+
+      'Modality' =>
+      (string) (
+        $metadata['procedure_modality']
+        ?? ''
+      ),
+
+      'SeriesNumber' =>
+      '1',
+
+      'InstanceNumber' =>
+      (string) $sequence,
     ];
 
     /*
-     * PatientSex.
-     */
+   * PatientSex.
+   */
     if (!empty($metadata['jk'])) {
-      $jk = strtoupper(trim((string) $metadata['jk']));
+      $jk = strtoupper(
+        trim((string) $metadata['jk'])
+      );
 
-      // format yang valid di orthanc pake bhs ingris (Laki-laki = M, permempuan = F)
+      // SIMRS:
+      // L = Laki-laki
+      // P = Perempuan
+      //
+      // DICOM:
+      // M = Male
+      // F = Female
       if ($jk === 'L') {
         $tags['PatientSex'] = 'M';
       } elseif ($jk === 'P') {
@@ -491,43 +626,42 @@ class PacsSharingService
     }
 
     /*
-     * PatientBirthDate.
-     */
+   * PatientBirthDate.
+   */
     if (!empty($metadata['tgllahir'])) {
-      $tags['PatientBirthDate'] =
-        date(
-          'Ymd',
-          strtotime($metadata['tgllahir'])
-        );
+      $birthTimestamp = strtotime(
+        $metadata['tgllahir']
+      );
+
+      if ($birthTimestamp !== false) {
+        $tags['PatientBirthDate'] =
+          date(
+            'Ymd',
+            $birthTimestamp
+          );
+      }
     }
 
     /*
-     * Metadata Study/Series hanya perlu
-     * diberikan pada instance pertama.
-     *
-     * Instance berikutnya akan inherit dari
-     * Series parent di Orthanc.
-     */
-    if ($isFirstInstance) {
-      if (!empty($metadata['procedure_modality'])) {
-        $tags['Modality'] =
-          (string) $metadata['procedure_modality'];
-      }
+   * Study / Series description.
+   */
+    if (!empty($metadata['procedure_nama'])) {
+      $procedureName =
+        (string) $metadata['procedure_nama'];
 
-      if (!empty($metadata['procedure_nama'])) {
-        $tags['StudyDescription'] =
-          (string) $metadata['procedure_nama'];
+      $tags['StudyDescription'] =
+        $procedureName;
 
-        $tags['SeriesDescription'] =
-          (string) $metadata['procedure_nama'];
-      }
+      $tags['SeriesDescription'] =
+        $procedureName;
+    }
 
-      if (!empty($metadata['doctor_name'])) {
-        $tags['ReferringPhysicianName'] =
-          (string) $metadata['doctor_name'];
-      }
-
-      $tags['SeriesNumber'] = 1;
+    /*
+   * Referring physician.
+   */
+    if (!empty($metadata['doctor_name'])) {
+      $tags['ReferringPhysicianName'] =
+        (string) $metadata['doctor_name'];
     }
 
     return $tags;
