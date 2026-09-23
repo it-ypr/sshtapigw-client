@@ -20,7 +20,7 @@ CREATE TABLE `sshtapigw_token` (
 
 ```sh
 composer config repositories.sshtapigw-client vcs https://github.com/it-ypr/sshtapigw-client
-composer require it-ypr/sshtapigw-client:v0.3.27
+composer require it-ypr/sshtapigw-client:v0.3.29
 ```
 **Generate ./common/services/SshtApiGwClient:**
 
@@ -80,7 +80,9 @@ return [
     'location_medication_ralan_ihs' => '', // uuid
     'location_medication_ralan_display' => '', // display
     'location_medication_ranap_ihs' => '',
-    'location_medication_ranap_display' => ''
+    'location_medication_ranap_display' => '',
+    // if using shared media storage for temp import dicom..
+    'path_storage_sharing' => '',
   ],
   // ...
 ];
