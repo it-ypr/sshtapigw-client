@@ -78,6 +78,12 @@ class PacsConsoleController extends Controller
     }
   }
 
+  /**
+   * Migrasi foto dari shared media storage ke Orthanc.
+   *
+   * Usage:
+   * php yii pacs-console/migrate-sharing-dicom
+   */
   public function actionMigrateSharingDicom()
   {
     $config = Yii::$app->params['SSHTApiConfig'] ?? [];
