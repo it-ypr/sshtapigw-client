@@ -57,7 +57,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
       ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
       ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
-      ->andWhere(['not in', 'tblnew.poli', ['11', '09', '98', '87', '74', '29']]) // Filter poli
+      ->andWhere(['not in', 'tblnew.poli', ['98', '99', '93', '79', '74', '29', '70', '53', '72', '75']]) // Filter poli (ini di rsprin)
       ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
       ->groupBy('tblnew.rm')
       ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
@@ -172,7 +172,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
           // 'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add, for exclude rd_daftar_periksa.kode just comment it
-          'rd_biodata.noregis' => ''
+          'rd_biodata.noregis' => '',    
+          'rd_biodata.ondelete' => 0,
+          'rd_daftar_periksa.kondisi' => 1
         ])
         ->one($dbSimrs);
     } elseif ($encounter_class == "INP") {
@@ -197,7 +199,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
           'rd_order_poli.rm' => $rm,
           'rd_order_poli.tanggal' => $tgl_param,
           // 'rd_order_poli.kode' => ['01201', '01202'], // config sini untuk add/exclude rd_daftar_periksa.kode
-          'rd_biodata.noregis' => ''
+          'rd_biodata.noregis' => '',    
+          'rd_biodata.ondelete' => 0,
+          'rd_daftar_periksa.kondisi' => 1
         ])
         ->one($dbSimrs);
     } else {
@@ -248,7 +252,11 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->select(['b.rm', 'h.hasil'])
       ->from('rd_hasil h')
       ->leftJoin('rd_biodata b', 'h.noradio = b.noradio')
-      ->where(['h.noradio' => $noradio, 'h.ondelete' => 0])
+      ->where([
+        'h.noradio' => $noradio, 
+        'h.ondelete' => 0,
+        'b.ondelete' => 0
+      ])
       ->one($dbSimrs);
   }
 
