@@ -348,6 +348,56 @@ class SshtApiClientController extends Controller
           "class" => "ralan"
         ];
 
+        // 6. guard logic cek case duplicate Ralan:
+        //
+        // Rule:
+        // 1 pasien + 1 dokter + 1 lokasi + 1 jam = 1 encounter
+        //
+        // Contoh:
+        // 100123 | DOKTER01 | POLI01 | 2026-09-08 07:42:17
+        // 100123 | DOKTER01 | POLI01 | 2026-09-08 07:55:20
+        // => DUPLICATE karena sama-sama jam 07
+
+        // Ambil YYYY-MM-DD HH dari arrived_at
+        $hourStart = date(
+          'Y-m-d H:00:00',
+          strtotime($times['arrived_at'])
+        );
+
+        $hourEnd = date(
+          'Y-m-d H:00:00',
+          strtotime($times['arrived_at'] . ' +1 hour')
+        );
+
+        $duplicateEncounter = Yii::$app->sshtAPIdb
+          ->createCommand("
+                SELECT idIHS
+                FROM ssht_encounter
+                WHERE subject_idIHS = :subject_idIHS
+                  AND practition_idIHS = :practitioner_idIHS
+                  AND location_idIHS = :location_idIHS
+                  AND arrived_start >= :hour_start
+                  AND arrived_start < :hour_end
+                  AND class = 'AMB'
+                LIMIT 1
+            ")
+          ->bindValues([
+            ':subject_idIHS' => $pasienIhs,
+            ':practitioner_idIHS' => $row['dokter_ihs'],
+            ':location_idIHS' => $row['lokasi_ihs'],
+            ':hour_start' => $hourStart,
+            ':hour_end' => $hourEnd,
+          ])
+          ->queryScalar();
+
+        if ($duplicateEncounter) {
+          echo " SKIPPED (DUPLICATE ENCOUNTER RALAN)";
+          echo " [IHS: {$duplicateEncounter}]";
+          echo " [{$hourStart}]\n";
+
+          continue;
+        }
+
         // --- DEBUG & CONFIRMATION ---
         if (
           !$debugger->allow(
@@ -389,7 +439,7 @@ class SshtApiClientController extends Controller
             'class' => $encData['class'],
           ])->execute();
 
-          // 6. SEND CONDITION (Looping ICD10)
+          // 7. SEND CONDITION (Looping ICD10)
           $icdList = $this->parseIcdCodes($row['icd_codes']);
 
           foreach ($icdList as $key => $icd) {
