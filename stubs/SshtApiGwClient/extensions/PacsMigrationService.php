@@ -35,6 +35,7 @@ class PacsMigrationService
       ->from('rd_biodata')
       ->where([
         'rd_biodata.tanggal' => $tanggal,
+        'rd_biodata.ondelete' => 0,
       ])
       ->andWhere([
         'not',
@@ -137,6 +138,8 @@ class PacsMigrationService
       )
       ->where([
         'rd_biodata.noradio' => $noradio,
+        'rd_biodata.ondelete' => 0,
+        'rdp.kondisi' => 1,
       ])
       ->one();
 
