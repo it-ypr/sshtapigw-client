@@ -10,8 +10,10 @@ CREATE TABLE `ssht_encounter` (
   `location_idIHS` char(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
   `location_nama` varchar(191) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
   `organization_idIHS` char(36) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL,
-  `arrived_start` datetime NOT NULL,
-  `arrived_end` datetime NOT NULL,
+  `arrived_start` datetime DEFAULT NULL,
+  `arrived_end` datetime DEFAULT NULL,
+  `triaged_start` datetime DEFAULT NULL,
+  `triaged_end` datetime DEFAULT NULL,
   `inprogress_start` datetime DEFAULT NULL,
   `inprogress_end` datetime DEFAULT NULL,
   `finish_start` datetime DEFAULT NULL,
@@ -19,5 +21,6 @@ CREATE TABLE `ssht_encounter` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `class` varchar(10) COLLATE utf8mb3_unicode_ci DEFAULT NULL COMMENT 'AMB=ralan,IMP=ranap,EMER=ugd',
+  `status` varchar(10) COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci;

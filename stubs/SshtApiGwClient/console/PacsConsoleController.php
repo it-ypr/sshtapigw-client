@@ -2,8 +2,8 @@
 
 namespace common\services\SshtApiGwClient\console;
 
-use common\services\SshtApiGwClient\extensions\PacsMigrationService;
-use common\services\SshtApiGwClient\extensions\PacsSharingService;
+use common\services\SshtApiGwClient\extensions\pacs\PacsMigrationService;
+use common\services\SshtApiGwClient\extensions\pacs\PacsSharingService;
 use Yii;
 use yii\console\Controller;
 use yii\console\ExitCode;

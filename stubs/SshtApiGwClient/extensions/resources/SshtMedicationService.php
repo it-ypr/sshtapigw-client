@@ -1,6 +1,6 @@
 <?php
 
-namespace common\services\SshtApiGwClient\extensions;
+namespace common\services\SshtApiGwClient\extensions\resources;
 
 use Exception;
 use Yii;

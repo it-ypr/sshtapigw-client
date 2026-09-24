@@ -1,11 +1,13 @@
 <?php
 
-namespace common\services\SshtApiGwClient\extensions;
+namespace common\services\SshtApiGwClient\extensions\pacs;
 
 use common\components\Config;
 // use common\services\SshtApiGwClient\SshtApiBase;
 use GuzzleHttp\Client;
+use RuntimeException;
 use Yii;
+
 
 class OrthancService
 {

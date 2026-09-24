@@ -1,10 +1,11 @@
 <?php
 
-namespace common\services\SshtApiGwClient\extensions;
+namespace common\services\SshtApiGwClient\extensions\pacs;
 
 use frontend\models\RdFoto;
 use Yii;
 use yii\db\Query;
+use RuntimeException;
 
 class PacsMigrationService
 {
