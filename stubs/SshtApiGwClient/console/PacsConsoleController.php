@@ -2,6 +2,7 @@
 
 namespace common\services\SshtApiGwClient\console;
 
+use Carbon\Carbon;
 use common\services\SshtApiGwClient\extensions\pacs\PacsMigrationService;
 use common\services\SshtApiGwClient\extensions\pacs\PacsSharingService;
 use Yii;
@@ -94,5 +95,19 @@ class PacsConsoleController extends Controller
     $result = $service->process();
 
     print_r($result);
+  }
+
+  /**
+   *  test date
+   *
+   * Usage:
+   * php yii pacs-console/test-date
+   */
+  public function actionTestDate()
+  {
+    // $date = date('Y-m-d H:i:s');
+    // print_r($date);
+    // Carbon::setLocale('id');
+    print_r(Carbon::now('Asia/Jakarta')->format('Y-M-dd H:i:s'));
   }
 }

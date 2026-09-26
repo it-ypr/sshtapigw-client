@@ -114,11 +114,11 @@ class SshtConditionService
           ]
         )->execute();
 
-        echo "Condition {$icd['code']} berhasil dikirim\n";
+        echo "Condition OK: {$conditionIhsId} ({$icd['code']})\n";
 
         sleep(1);
       } catch (Exception $e) {
-        echo "Condition {$icd['code']} gagal: {$e->getMessage()}\n";
+        echo "Condition Error: {$icd['code']} gagal: {$e->getMessage()}\n";
 
         sleep(5);
       }

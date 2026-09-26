@@ -104,41 +104,41 @@ class SshtApiClientController extends Controller
    */
   public function actionSendTaskUgd(string $tgl_param)
   {
-    // UGD - inprogress 
-    // // encounter & diagnosa
-    $this->actionSendEncounterUgd($tgl_param);
-    // // observasi vital
-    $this->actionSendObservationUgd($tgl_param);
-    // // general procedure
-    $this->actionSendProcedureGeneralUgd($tgl_param);
-    // // serviceRequest Radiologi
-    $this->actionSendServiceRequestRadioUgd($tgl_param);
-    // // imagingStudy
-    $this->actionSendImagingStudyUgd($tgl_param);
+    // // UGD - inprogress 
+    // // // encounter & diagnosa
+    // $this->actionSendEncounterUgd($tgl_param);
+    // // // observasi vital
+    // $this->actionSendObservationUgd($tgl_param);
+    // // // general procedure
+    // $this->actionSendProcedureGeneralUgd($tgl_param);
+    // // // // serviceRequest Radiologi
+    // $this->actionSendServiceRequestRadioUgd($tgl_param);
+    // // // imagingStudy
+    // $this->actionSendImagingStudyUgd($tgl_param);
     // // observation & diagnosticReport Radiologi
-    $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
-    // medicationRequest & medicationDispense (inprogress)
-    $this->actionGenerateMedicationRequestUgd($tgl_param);
-    // send medicationRequest manual (CLI/command prompt):
-    // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
-    // send medicationRequest via cron:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
-    // send medicationRequest via cron with print logs:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan >> /home/psidev/apps/logs/medication-request-$(date +\%Y-\%m-\%d).log 2>&1'
-    // send medicationDispense manual (CLI/command prompt):
-    // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
-    // send medicationDispense on cron:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
-    // send medicationDispense on cron with print logs:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
-    // Lab - ServiceRequest & Speciment
+    // $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
+    // // medicationRequest & medicationDispense (inprogress)
+    // $this->actionGenerateMedicationRequestUgd($tgl_param);
+    // // send medicationRequest manual (CLI/command prompt):
+    // // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
+    // // send medicationRequest via cron:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // // send medicationRequest via cron with print logs:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan >> /home/psidev/apps/logs/medication-request-$(date +\%Y-\%m-\%d).log 2>&1'
+    // // send medicationDispense manual (CLI/command prompt):
+    // // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
+    // // send medicationDispense on cron:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // // send medicationDispense on cron with print logs:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
+    // // Lab - ServiceRequest & Speciment
     $this->actionSendServiceRequestAndSpecimentLabUgd($tgl_param);
-    // Lab - Observation & DiagnosticReport (on-testing)
-    // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
-    $this->actionSendObservationLabUgd($tgl_param);
-    // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
-    $this->actionSendDiagnosticReportLabUgd($tgl_param);
-    // EncounterFinish (inprogress)
+    // // Lab - Observation & DiagnosticReport (on-testing)
+    // // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
+    // $this->actionSendObservationLabUgd($tgl_param);
+    // // // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
+    // $this->actionSendDiagnosticReportLabUgd($tgl_param);
+    // // // EncounterFinish (inprogress)
   }
 
   /**

@@ -21,6 +21,6 @@ CREATE TABLE `ssht_encounter` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `class` varchar(10) COLLATE utf8mb3_unicode_ci DEFAULT NULL COMMENT 'AMB=ralan,IMP=ranap,EMER=ugd',
-  `status` varchar(10) COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `status` varchar(20) COLLATE utf8mb3_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci;

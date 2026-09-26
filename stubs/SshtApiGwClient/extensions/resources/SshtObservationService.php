@@ -149,13 +149,19 @@ class SshtObservationService
       ]
     );
 
-    $statusCode = $response['statusCode'] ?? null;
+    // $statusCode = $response['statusCode'] ?? null;
+    $statusCode = $response->getStatusCode() ?? null;
 
     if (!in_array($statusCode, [200, 201], true)) {
       return null;
     }
 
-    $resData = $response['data'] ?? [];
+    $respReq = json_decode(
+      $response->getBody()->getContents(),
+      true
+    );
+
+    $resData = $respReq['data'] ?? [];
 
     if (empty($resData)) {
       return null;
@@ -176,32 +182,28 @@ class SshtObservationService
       ->createCommand()
       ->insert('ssht_observation', [
         'observation_idIHS' => $observationIdIhs,
-        'encounter_idIHS' =>
-        $resData['encounter_idIHS'] ?? null,
-        'subject_idIHS' =>
-        $resData['subject_idIHS']
+        'encounter_idIHS' => $resData['encounter_idIHS'] ?? null,
+        'subject_idIHS' => $resData['subject_idIHS']
           ?? $resData['subject_idIdIHS']
           ?? null,
-        'obs_code' =>
-        $resData['obs_code'] ?? null,
-        'obs_display' =>
-        $resData['obs_display'] ?? null,
-        'obs_valueString' =>
-        $resData['obs_valueString'] ?? null,
-        'date' =>
-        $resData['date'] ?? null,
+
+        'obs_system' => $resData['obs_system'] ?? null,
+        'obs_code' => $resData['obs_code'] ?? null,
+        'obs_display' => $resData['obs_display'] ?? null,
+
+        'obs_valueString' => $resData['obs_valueString'] ?? null,
+
+        'date' => $resData['date'] ?? null,
+
         'rm' => $rm,
-        'status' =>
-        $resData['status'] ?? null,
+        'status' => $resData['status'] ?? null,
         'created_at' => $now,
-        'obs_system' =>
-        $resData['obs_system'] ?? null,
-        'category_system' =>
-        $resData['category_system'] ?? null,
-        'category_code' =>
-        $resData['category_code'] ?? null,
-        'category_display' =>
-        $resData['category_display'] ?? null,
+
+        'category_system' => $resData['category_system'] ?? null,
+        'category_code' => $resData['category_code'] ?? null,
+        'category_display' => $resData['category_display'] ?? null,
+
+        'performer_idIHS' => $dataApi['performer'] ?? null,
       ])
       ->execute();
 

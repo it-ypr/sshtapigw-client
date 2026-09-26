@@ -39,16 +39,16 @@ class SshtSpecimenService
     array $payload,
     array $payloadSpeciment
   ): void {
-    if (
-      !$this->debugger->allow(
-        context: SshtApiUtil::genDebugContext(
-          SshtApiUrl::SPECIMENT_CREATE
-        ),
-        payload: $payloadSpeciment,
-      )
-    ) {
-      continue;
-    }
+    // if (
+    //   !$this->debugger->allow(
+    //     context: SshtApiUtil::genDebugContext(
+    //       SshtApiUrl::SPECIMENT_CREATE
+    //     ),
+    //     payload: $payloadSpeciment,
+    //   )
+    // ) {
+    //   continue;
+    // }
 
     $response = SshtApiBase::request(
       SshtApiUrl::SPECIMENT_CREATE,
@@ -142,5 +142,10 @@ class SshtSpecimenService
         "{$payloadSpeciment['sampleID']}, " .
         "Rm: {$enc['rm']}\n"
     );
+  }
+
+  private function stdout(string $message): void
+  {
+    echo $message;
   }
 }

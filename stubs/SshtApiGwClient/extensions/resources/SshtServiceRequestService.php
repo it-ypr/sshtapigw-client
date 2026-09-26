@@ -104,7 +104,7 @@ class SshtServiceRequestService
 
         $duplicateServiceRequestRadioRalan =
           $this->dbLocal->createCommand("
-            SELECT idIHS
+            SELECT servicerequest_idIHS
             FROM ssht_servicerequest
             WHERE patient_idIHS = :subject_idIHS
               AND encounter_idIHS = :encounter_idIHS
@@ -140,7 +140,7 @@ class SshtServiceRequestService
         if ($duplicateServiceRequestRadioRalan) {
           $this->stdout(
             " SKIPPED "
-              . "(DUPLICATE ServiceRequest Radio - UGD)"
+              . "(DUPLICATE ServiceRequest Radio - RALAN)"
           );
 
           $this->stdout(
@@ -302,18 +302,19 @@ class SshtServiceRequestService
 
         $duplicateServiceRequestRadioUgd =
           $this->dbLocal->createCommand("
-            SELECT idIHS
+            SELECT ssht_servicerequest.servicerequest_idIHS
             FROM ssht_servicerequest
+            LEFT JOIN ssht_encounter on ssht_servicerequest.encounter_idIHS = ssht_encounter.idIHS 
             WHERE patient_idIHS = :subject_idIHS
-              AND encounter_idIHS = :encounter_idIHS
-              AND petugas_ihs = :petugas_idIHS
-              AND dokter_request_idIHS = :dokter_request_idIHS
-              AND code = :loinc_code
-              AND category_display = 'Imaging'
-              AND acsn = :acsn
-              AND date >= :hour_start
-              AND date < :hour_end
-              AND class = 'EMER'
+              AND ssht_servicerequest.encounter_idIHS = :encounter_idIHS
+              AND ssht_servicerequest.petugas_idIHS = :petugas_idIHS
+              AND ssht_servicerequest.dokter_request_idIHS = :dokter_request_idIHS
+              AND ssht_servicerequest.code = :loinc_code
+              AND ssht_servicerequest.category_display = 'Imaging'
+              AND ssht_servicerequest.acsn = :acsn
+              AND ssht_servicerequest.date >= :hour_start
+              AND ssht_servicerequest.date < :hour_end
+              AND ssht_encounter.class = 'EMER'
             LIMIT 1
           ")
           ->bindValues([
@@ -552,6 +553,71 @@ class SshtServiceRequestService
         $dataPreReqLab['petugas_nama'],
       ];
 
+      // 3. Guard duplicate ServiceRequest
+      $hourStart = date(
+        'Y-m-d H:00:00',
+        strtotime($enc['inprogress_start'])
+      );
+
+      $hourEnd = date(
+        'Y-m-d H:00:00',
+        strtotime(
+          $enc['inprogress_start'] . ' +1 hour'
+        )
+      );
+
+      $duplicateServiceRequestRadioUgd =
+        $this->dbLocal->createCommand("
+            SELECT ssht_servicerequest.servicerequest_idIHS
+            FROM ssht_servicerequest
+            LEFT JOIN ssht_encounter on ssht_servicerequest.encounter_idIHS = ssht_encounter.idIHS 
+            WHERE patient_idIHS = :subject_idIHS
+              AND ssht_servicerequest.encounter_idIHS = :encounter_idIHS
+              AND ssht_servicerequest.petugas_idIHS = :petugas_idIHS
+              AND ssht_servicerequest.dokter_request_idIHS = :dokter_request_idIHS
+              AND ssht_servicerequest.code = :loinc_code
+              AND ssht_servicerequest.category_display = 'Laboratory procedure'
+              AND ssht_servicerequest.date >= :hour_start
+              AND ssht_servicerequest.date < :hour_end
+              AND ssht_encounter.class = :encounter_class
+            LIMIT 1
+          ")
+        ->bindValues([
+          ':subject_idIHS' => $enc['subject_idIHS'] ?? null,
+
+          ':encounter_idIHS' => $enc['idIHS'],
+
+          ':petugas_idIHS' => $simrs['petugas_ihs'] ?? null,
+
+          ':dokter_request_idIHS' => $enc['practition_idIHS'] ?? null,
+
+          ':loinc_code' => $simrs['loinc'] ?? null,
+
+          ':hour_start' => $hourStart,
+
+          ':hour_end' => $hourEnd,
+
+          ':encounter_class' => $enc['class'],
+        ])
+        ->queryScalar();
+
+      if ($duplicateServiceRequestRadioUgd) {
+        $this->stdout(
+          " SKIPPED "
+            . "(DUPLICATE ServiceRequest LAB - {$enc['class']})"
+        );
+
+        $this->stdout(
+          " [IHS: {$duplicateServiceRequestRadioUgd}]"
+        );
+
+        $this->stdout(
+          " [{$hourStart}]\n"
+        );
+
+        continue;
+      }
+
       if (
         !$this->debugger->allow(
           context: SshtApiUtil::genDebugContext(
@@ -690,6 +756,17 @@ class SshtServiceRequestService
         'dok' =>
         $enc['practition_lokalid'],
       ];
+
+      if (
+        !$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::SPECIMENT_CREATE
+          ),
+          payload: $payloadSpeciment,
+        )
+      ) {
+        continue;
+      }
 
       (new SshtSpecimenService())
         ->sendRalanSingle(

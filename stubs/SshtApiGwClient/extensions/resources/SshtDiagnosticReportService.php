@@ -31,7 +31,8 @@ class SshtDiagnosticReportService
   public function createRadio(
     string $servicerequestIdIhs,
     string $value,
-    string $noradio
+    string $noradio,
+    string $rm
   ): ?string {
     $payload = [
       'servicerequest_idIHS' => $servicerequestIdIhs,
@@ -55,13 +56,19 @@ class SshtDiagnosticReportService
       ]
     );
 
-    $statusCode = $response['statusCode'] ?? null;
+    // $statusCode = $response['statusCode'] ?? null;
+    $statusCode = $response->getStatusCode() ?? null;
 
     if (!in_array($statusCode, [200, 201], true)) {
       return null;
     }
 
-    $resData = $response['data'] ?? [];
+    $respReq = json_decode(
+      $response->getBody()->getContents(),
+      true
+    );
+
+    $resData = $respReq['data'] ?? [];
 
     if (empty($resData)) {
       return null;
@@ -78,30 +85,20 @@ class SshtDiagnosticReportService
 
     $now = date('Y-m-d H:i:s');
 
-    $this->dbLocal
-      ->createCommand()
+    $this->dbLocal->createCommand()
       ->insert('ssht_diagnosticreport', [
-        'diagnosticreport_idIHS' =>
-        $diagnosticReportIdIhs,
-        'encounter_idIHS' =>
-        $resData['encounter_idIHS'] ?? null,
-        'servicerequest_idIHS' =>
-        $servicerequestIdIhs,
-        'subject_idIHS' =>
-        $resData['subject_idIHS'] ?? null,
-        'rm' =>
-        $resData['rm'] ?? null,
-        'date' =>
-        $resData['date'] ?? null,
-        'status' =>
-        $resData['status'] ?? null,
+        'diagnosticreport_idIHS' => $diagnosticReportIdIhs,
+        'encounter_idIHS' => $resData['encounter_idIHS'] ?? null,
+        'servicerequest_idIHS' => $servicerequestIdIhs,
+        'subject_idIHS' => $resData['subject_idIHS'] ?? null,
+        // 'rm' => $resData['rm'] ?? null,
+        'rm' => $rm ?? null,
+        'date' => $resData['date'] ?? null,
+        'status' => $resData['status'] ?? null,
         'created_at' => $now,
-        'category_system' =>
-        $resData['category_system'] ?? null,
-        'category_display' =>
-        $resData['category_display'] ?? null,
-        'category_code' =>
-        $resData['category_code'] ?? null,
+        'category_system' => $resData['category_system'] ?? null,
+        'category_display' => $resData['category_display'] ?? null,
+        'category_code' => $resData['category_code'] ?? null,
       ])
       ->execute();
 

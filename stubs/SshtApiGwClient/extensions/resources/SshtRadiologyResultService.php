@@ -74,6 +74,11 @@ class SshtRadiologyResultService
         ]
       );
 
+      $respImagingReq = json_decode(
+        $respImagingReq->getBody()->getContents(),
+        true
+      );
+
       $items = $respImagingReq['data'] ?? [];
 
       if (empty($items)) {
@@ -111,6 +116,11 @@ class SshtRadiologyResultService
               'id' => $imgIdIhs
             ]
           ]
+        );
+
+        $respDetail = json_decode(
+          $respDetail->getBody()->getContents(),
+          true
         );
 
         $detailData = $respDetail['data'] ?? [];
@@ -250,7 +260,8 @@ class SshtRadiologyResultService
               $this->diagnosticReport->createRadio(
                 servicerequestIdIhs: $srIdIhs,
                 value: $impressionText,
-                noradio: $noradio
+                noradio: $noradio,
+                rm: $row['rm'],
               );
 
               $this->stdout(
