@@ -25,86 +25,215 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     $dbSimrs = Yii::$app->db; // dbSimrs
 
     $subQuery = (new Query())
-      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
+      ->select([
+        'Id',
+        'trim(rm) as rm',
+        'tanggal',
+        'waktu',
+        'trim(dokter) as dokter',
+        'poli',
+        'tglperiksa',
+        'resep',
+      ])
       ->from('mr_periksa_poli')
-      ->where("tanggal LIKE '$tgl_param%'")
-      // ->where(['like', 'tanggal', $tgl_param . '%', false])
+      ->where(['like', 'tanggal', $tgl_param . '%', false])
+      ->andWhere([
+        'not in',
+        'poli',
+        ['98', '99', '93', '79', '74', '29', '70', '53', '72', '75'],
+      ])
       ->groupBy('Id');
 
     return (new Query())
       ->select([
         'tblnew.rm',
-        'TRIM(mr_ktp.ktp) as ktp',
-        'TRIM(mmr.nama) as pasien_nama',
+        'TRIM(mr_ktp.ktp) AS ktp',
+        'TRIM(mmr.nama) AS pasien_nama',
         'tblnew.dokter',
-        'TRIM(muser.nm_user) as dokter_nama',
-        // 'muser.idssht as dokter_ihs',
-        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
-        // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
-        'tblnew.poli as poli',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
-        'MIN(tblnew.tglperiksa) as a_end',
-        'MAX(tblnew.resep) as p_rawend'
+        'TRIM(muser.nm_user) AS dokter_nama',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' AS dokter_ihs',
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' AS lokasi_ihs',
+        'tblnew.poli AS poli',
+        "GROUP_CONCAT(
+                DISTINCT RTRIM(mr_kunjungan.icd)
+                ORDER BY mr_kunjungan.Id ASC
+                SEPARATOR ';'
+            ) AS icd_codes",
+        'MIN(tblnew.tglperiksa) AS a_end',
+        'MAX(tblnew.resep) AS p_rawend',
       ])
       ->from(['tblnew' => $subQuery])
-      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
-      ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
-      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
-      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
-      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where("tblnew.tglperiksa LIKE '$tgl_param%'")
-      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
-      ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
-      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
-      ->andWhere(['not in', 'tblnew.poli', ['98', '99', '93', '79', '74', '29', '70', '53', '72', '75']]) // Filter poli (ini di rsprin)
-      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
-      ->groupBy('tblnew.rm')
-      ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
+      ->innerJoin(
+        'mr_kunjungan',
+        'tblnew.rm = mr_kunjungan.rm'
+          . ' AND mr_kunjungan.tlanjut = \'PULANG\''
+          . ' AND mr_kunjungan.tanggal = \'' . $tgl_param . '\''
+          . ' AND mr_kunjungan.poli NOT IN (\'98\', \'99\', \'93\', \'79\', \'74\', \'29\', \'70\', \'53\', \'72\', \'75\')'
+          . ' AND mr_kunjungan.dokter = tblnew.dokter'
+      )
+      ->innerJoin(
+        'mpoli',
+        'tblnew.poli = mpoli.poli'
+      )
+      ->innerJoin(
+        'mmr',
+        'tblnew.rm = mmr.rm'
+      )
+      ->innerJoin(
+        'mr_ktp',
+        'tblnew.rm = mr_ktp.rm'
+      )
+      ->innerJoin(
+        'muser',
+        'tblnew.dokter = muser.id_user'
+      )
+      ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
+      ->andWhere([
+        'not in',
+        'tblnew.poli',
+        ['98', '99', '93', '79', '74', '29', '70', '53', '72', '75'],
+      ])
+      ->andWhere([
+        'not',
+        ['muser.' . SshtApiQueryMapping::MUSER_IHS => null],
+      ])
+      ->groupBy([
+        'tblnew.rm',
+        'tblnew.waktu',
+        'tblnew.poli',
+        'tblnew.dokter',
+      ])
+      ->all($dbSimrs);
   }
 
   public static function queryEncounterUgdSimrs($tgl_param)
   {
-    $dbSimrs = Yii::$app->db; // dbSimrs
+    $dbSimrs = Yii::$app->db;
 
     $subQuery = (new Query())
-      ->select(['Id', 'trim(rm) as rm', 'tanggal', 'trim(dokter) as dokter', 'poli', 'tglperiksa', 'resep'])
+      ->select([
+        'Id',
+        'trim(rm) as rm',
+        'tanggal',
+        'waktu',
+        'trim(dokter) as dokter',
+        'poli',
+        'tglperiksa',
+        'resep',
+      ])
       ->from('mr_periksa_poli')
-      ->where("tanggal LIKE '$tgl_param%'")
-      // ->where(['like', 'tanggal', $tgl_param . '%', false])
+      ->where(['like', 'tanggal', $tgl_param . '%', false])
+      ->andWhere([
+        'in',
+        'poli',
+        ['29'],
+      ])
       ->groupBy('Id');
 
     return (new Query())
       ->select([
         'tblnew.rm',
-        'TRIM(mr_ktp.ktp) as ktp',
-        'TRIM(mmr.nama) as pasien_nama',
+        'TRIM(mr_ktp.ktp) AS ktp',
+        'TRIM(mmr.nama) AS pasien_nama',
         'tblnew.dokter',
-        'TRIM(muser.nm_user) as dokter_nama',
-        // 'muser.idssht as dokter_ihs',
-        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
-        // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
-        'tblnew.poli as poli',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan.icd) ORDER BY mr_kunjungan.Id ASC SEPARATOR ';') as icd_codes",
-        'MIN(tblnew.tglperiksa) as a_end',
-        'MAX(tblnew.resep) as p_rawend'
+        'TRIM(muser.nm_user) AS dokter_nama',
+        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' AS dokter_ihs',
+        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' AS lokasi_ihs',
+        'tblnew.poli AS poli',
+        "GROUP_CONCAT(
+                DISTINCT RTRIM(mr_kunjungan.icd)
+                ORDER BY mr_kunjungan.Id ASC
+                SEPARATOR ';'
+            ) AS icd_codes",
+        'MIN(tblnew.tglperiksa) AS a_end',
+        'MAX(tblnew.resep) AS p_rawend',
       ])
       ->from(['tblnew' => $subQuery])
-      ->innerJoin('mr_kunjungan', 'tblnew.rm = mr_kunjungan.rm')
+      ->innerJoin(
+        'mr_kunjungan',
+        'tblnew.rm = mr_kunjungan.rm'
+          . ' AND mr_kunjungan.tlanjut = \'PULANG\''
+          . ' AND mr_kunjungan.tanggal = \'' . $tgl_param . '\''
+          . ' AND mr_kunjungan.poli IN (\'29\')'
+          . ' AND mr_kunjungan.dokter = tblnew.dokter'
+      )
       ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
       ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
       ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
       ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where("tblnew.tglperiksa LIKE '$tgl_param%'")
-      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
-      ->andWhere(['like', 'mr_kunjungan.tanggal', $tgl_param . '%', false])
-      ->andWhere(['mr_kunjungan.tlanjut' => 'PULANG'])
-      ->andWhere(['in', 'tblnew.poli', ['29']]) // Filter poli UGD
-      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
-      ->groupBy('tblnew.rm')
-      ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
+      ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false,])
+      ->andWhere(['in', 'tblnew.poli', ['29'],])
+      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null,],])
+      ->groupBy([
+        'tblnew.rm',
+        'tblnew.waktu',
+        'tblnew.poli',
+        'tblnew.dokter',
+      ])
+      ->all($dbSimrs);
   }
+
+  // rsprin query ugd
+  // public static function queryEncounterUgdSimrs($tgl_param)
+  // {
+  //   $dbSimrs = Yii::$app->db; // dbSimrs
+  //
+  //   $subQuery = (new Query())
+  //     ->select([
+  //       'Id',
+  //       'trim(rm) as rm',
+  //       'tanggal',
+  //       'trim(dokter) as dokter',
+  //       'poli',
+  //       'waktu',
+  //       'tglperiksa',
+  //       'resep',
+  //     ])
+  //     ->from('mr_periksa_poli')
+  //     ->where(['like', 'tanggal', $tgl_param . '%', false])
+  //     ->andWhere(['poli' => '29'])
+  //     ->groupBy('Id');
+  //
+  //   return (new Query())
+  //     ->select([
+  //       'tblnew.rm',
+  //       'TRIM(mr_ktp.ktp) as ktp',
+  //       'TRIM(mmr.nama) as pasien_nama',
+  //       'tblnew.dokter',
+  //       'TRIM(muser.nm_user) as dokter_nama',
+  //       'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
+  //       'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
+  //       'tblnew.poli as poli',
+  //       'tblnew.waktu as waktu',
+  //       "CONCAT_WS(
+  //               ';',
+  //               NULLIF(TRIM(mr_igd.icd1), ''),
+  //               NULLIF(TRIM(mr_igd.icd2), ''),
+  //               NULLIF(TRIM(mr_igd.icd3), ''),
+  //               NULLIF(TRIM(mr_igd.icd4), ''),
+  //               NULLIF(TRIM(mr_igd.icd5), '')
+  //           ) as icd_codes",
+  //       'MIN(tblnew.tglperiksa) as a_end',
+  //       'MAX(tblnew.resep) as p_rawend',
+  //     ])
+  //     ->from(['tblnew' => $subQuery])
+  //     ->innerJoin(
+  //       'mr_igd',
+  //       'tblnew.rm = TRIM(mr_igd.rm)'
+  //         . ' AND tblnew.tanggal = mr_igd.tanggal'
+  //         . ' AND tblnew.poli = mr_igd.poli'
+  //         . ' AND tblnew.waktu = mr_igd.waktu'
+  //     )
+  //     ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
+  //     ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
+  //     ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
+  //     ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
+  //     ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
+  //     ->andWhere(['tblnew.poli' => '29'])
+  //     ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
+  //     ->groupBy(['tblnew.rm', 'tblnew.waktu',])
+  //     ->all($dbSimrs);
+  // }
 
   public static function queryEncounterRanapSimrs($tgl_param)
   {
@@ -192,8 +321,8 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
           'rd_daftar_periksa.loinc'
         ])
         ->from('rd_order_poli')
-        // ->innerJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
-        ->leftJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
+        // ->leftJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
+        ->innerJoin('rd_biodata', 'rd_order_poli.noradio = rd_biodata.noradio')
         ->leftJoin('muser', 'rd_biodata.dperiksa = muser.nik')
         ->leftJoin('rd_daftar_periksa', 'rd_order_poli.kode = rd_daftar_periksa.kode')
         ->where([
