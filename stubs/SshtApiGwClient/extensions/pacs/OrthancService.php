@@ -196,4 +196,12 @@ class OrthancService
       $response->getBody()->getContents()
     );
   }
+
+  public function findInstances(array $query): array
+  {
+    return $this->find([
+      'Level' => 'Instance',
+      'Query' => $query,
+    ]);
+  }
 }

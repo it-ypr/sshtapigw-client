@@ -5,22 +5,42 @@ namespace common\services\SshtApiGwClient\extensions\pacs;
 use frontend\models\RdFoto;
 use Yii;
 use yii\db\Query;
-use RuntimeException;
 
+/** @package common\services\SshtApiGwClient\extensions\pacs 
+ * 
+ * PacsMigrationService 
+ * service untuk import data image legacy dari rd_foto ke orthanc pacs
+ */
 class PacsMigrationService
 {
   private OrthancService $orthanc;
 
-  public function __construct(?OrthancService $orthanc = null)
-  {
+  private PacsLockService $lock;
+
+  /**
+   * db connection untuk akses rd_foto_orthanc.
+   */
+  private $dbLocal;
+
+  public function __construct(
+    ?OrthancService $orthanc = null,
+    ?PacsLockService $lock = null
+  ) {
     $this->orthanc = $orthanc ?? new OrthancService();
+
+    $this->lock = $lock ?? new PacsLockService();
+
+    $this->dbLocal = Yii::$app->db;
+    // $this->dbLocal = Yii::$app->db3;
   }
 
   /**
-   * Migrate seluruh foto radiologi seko rd_foto berdasarkan tanggal pemeriksaan.
+   * Migrate seluruh foto radiologi dari rd_foto
+   * berdasarkan tanggal pemeriksaan.
    */
-  public function migrateByDate(string $tanggal): array
-  {
+  public function migrateByDate(
+    string $tanggal
+  ): array {
     $result = [
       'total_noradio' => 0,
       'total_foto' => 0,
@@ -52,7 +72,8 @@ class PacsMigrationService
       ->distinct()
       ->column();
 
-    $result['total_noradio'] = count($noradios);
+    $result['total_noradio'] =
+      count($noradios);
 
     foreach ($noradios as $noradio) {
       $this->migrateNoradio(
@@ -65,15 +86,63 @@ class PacsMigrationService
   }
 
   /**
+   * Acquire lock per noradio.
+   *
+   * Migration dan sharing tidak boleh
+   * memproses noradio yang sama secara bersamaan.
+   */
+  private function migrateNoradio(
+    string $noradio,
+    array &$result
+  ): void {
+    $locked =
+      $this->lock->acquire(
+        $noradio,
+        0
+      );
+
+    if (!$locked) {
+      Yii::warning([
+        'event' =>
+        'pacs_migration_lock_failed',
+
+        'noradio' =>
+        $noradio,
+      ], 'pacs-migration');
+
+      return;
+    }
+
+    try {
+      $this->migrateNoradioLocked(
+        $noradio,
+        $result
+      );
+    } finally {
+      $this->lock->release(
+        $noradio
+      );
+    }
+  }
+
+  /**
    * Migrate seluruh foto untuk satu noradio.
    *
-   * in-case ono temuan 1 noradio untuk (n) rd_foto.foto
+   * Rule:
    *
    *   1 Study
    *   1 Series
    *   N Instance
+   *
+   * Identity image:
+   *
+   *   noradio + source_sequence
+   *
+   * source_sequence:
+   *
+   *   rd_foto.NoFoto
    */
-  private function migrateNoradio(
+  private function migrateNoradioLocked(
     string $noradio,
     array &$result
   ): void {
@@ -146,8 +215,11 @@ class PacsMigrationService
 
     if (!$biodata) {
       Yii::warning([
-        'event' => 'pacs_migration_biodata_not_found',
-        'noradio' => $noradio,
+        'event' =>
+        'pacs_migration_biodata_not_found',
+
+        'noradio' =>
+        $noradio,
       ], 'pacs-migration');
 
       return;
@@ -164,25 +236,30 @@ class PacsMigrationService
 
     if (empty($fotos)) {
       Yii::warning([
-        'event' => 'pacs_migration_foto_not_found',
-        'noradio' => $noradio,
+        'event' =>
+        'pacs_migration_foto_not_found',
+
+        'noradio' =>
+        $noradio,
       ], 'pacs-migration');
 
       return;
     }
 
-    $result['total_foto'] += count($fotos);
+    $result['total_foto'] +=
+      count($fotos);
 
     /*
-     * Cari mapping yang sudah ada untuk noradio ini.
+     * Cari mapping sukses yang sudah ada.
      *
-     * Jika migration legacy db sebelumnya sudah berhasil membuat Study/Series,
-     * bisa melanjutkan instance berikutnya ke Series tersebut.
+     * Mapping ini dipakai untuk recovery
+     * Study/Series hierarchy.
      */
     $existingMapping = (new Query())
       ->from('rd_foto_orthanc')
       ->where([
         'noradio' => $noradio,
+        'status' => 1,
       ])
       ->andWhere([
         'not',
@@ -193,7 +270,7 @@ class PacsMigrationService
       ->orderBy([
         'id' => SORT_ASC,
       ])
-      ->one();
+      ->one($this->dbLocal);
 
     $orthancStudyId =
       $existingMapping['orthanc_study_id']
@@ -204,36 +281,43 @@ class PacsMigrationService
       ?? null;
 
     /*
-     * Jika mapping lokal tidak punya Study ID, coba cari langsung
-     * ke Orthanc menggunakan AccessionNumber.
+     * Kalau registry belum punya Study,
+     * coba recovery langsung dari Orthanc.
      */
     if (empty($orthancStudyId)) {
       try {
         $orthancStudyId =
-          $this->orthanc->findStudyByAccessionNumber(
+          $this->orthanc
+          ->findStudyByAccessionNumber(
             $noradio
           );
       } catch (\Throwable $e) {
         Yii::warning([
-          'event' => 'pacs_migration_find_study_failed',
-          'noradio' => $noradio,
-          'message' => $e->getMessage(),
+          'event' =>
+          'pacs_migration_find_study_failed',
+
+          'noradio' =>
+          $noradio,
+
+          'message' =>
+          $e->getMessage(),
         ], 'pacs-migration');
       }
     }
 
     /*
-     * Kalau Study sudah ditemukan tetapi Series belum diketahui,
-     * ambil hierarchy Study dari Orthanc.
+     * Kalau Study sudah ada tetapi Series belum
+     * diketahui, ambil Series pertama.
      */
     if (
       !empty($orthancStudyId)
       && empty($orthancSeriesId)
     ) {
       try {
-        $study = $this->orthanc->getStudy(
-          $orthancStudyId
-        );
+        $study =
+          $this->orthanc->getStudy(
+            $orthancStudyId
+          );
 
         $orthancSeriesId =
           $study['Series'][0]
@@ -241,37 +325,61 @@ class PacsMigrationService
 
         if (empty($orthancSeriesId)) {
           Yii::warning([
-            'event' => 'pacs_migration_existing_study_without_series',
-            'noradio' => $noradio,
-            'orthanc_study_id' => $orthancStudyId,
+            'event' =>
+            'pacs_migration_existing_study_without_series',
+
+            'noradio' =>
+            $noradio,
+
+            'orthanc_study_id' =>
+            $orthancStudyId,
           ], 'pacs-migration');
         }
       } catch (\Throwable $e) {
         Yii::warning([
-          'event' => 'pacs_migration_get_existing_study_failed',
-          'noradio' => $noradio,
-          'orthanc_study_id' => $orthancStudyId,
-          'message' => $e->getMessage(),
+          'event' =>
+          'pacs_migration_get_existing_study_failed',
+
+          'noradio' =>
+          $noradio,
+
+          'orthanc_study_id' =>
+          $orthancStudyId,
+
+          'message' =>
+          $e->getMessage(),
         ], 'pacs-migration');
       }
     }
 
     foreach ($fotos as $foto) {
-      $rdFotoId = $foto->getPrimaryKey();
+      $rdFotoId =
+        $foto->getPrimaryKey();
+
+      $sourceSequence =
+        (int) $foto->NoFoto;
 
       /*
-       * Cari mapping berdasarkan rd_foto_id.
+       * Identity utama image:
+       *
+       *   noradio + source_sequence
+       *
+       * rd_foto_id hanya reference source legacy.
        */
       $mapping = (new Query())
         ->from('rd_foto_orthanc')
         ->where([
-          'rd_foto_id' => $rdFotoId,
+          'noradio' =>
+          $noradio,
+
+          'source_sequence' =>
+          $sourceSequence,
         ])
-        ->one();
+        ->one($this->dbLocal);
 
       /*
-       * Jika sudah sukses dan instance ID tersedia,
-       * jangan kirim ulang ke Orthanc.
+       * Kalau sudah sukses dan instance tersedia,
+       * jangan create ulang.
        */
       if (
         $mapping
@@ -281,7 +389,7 @@ class PacsMigrationService
         $result['skipped']++;
 
         /*
-         * Recovery hierarchy dari mapping lokal.
+         * Recovery hierarchy dari mapping.
          */
         if (
           empty($orthancStudyId)
@@ -300,13 +408,24 @@ class PacsMigrationService
         }
 
         Yii::info([
-          'event' => 'pacs_migration_skipped',
-          'noradio' => $noradio,
-          'rd_foto_id' => $rdFotoId,
+          'event' =>
+          'pacs_migration_skipped',
+
+          'noradio' =>
+          $noradio,
+
+          'rd_foto_id' =>
+          $rdFotoId,
+
+          'source_sequence' =>
+          $sourceSequence,
+
           'orthanc_instance_id' =>
           $mapping['orthanc_instance_id'],
+
           'orthanc_study_id' =>
           $mapping['orthanc_study_id'],
+
           'orthanc_series_id' =>
           $mapping['orthanc_series_id'],
         ], 'pacs-migration');
@@ -315,61 +434,73 @@ class PacsMigrationService
       }
 
       /*
-       * Instance pertama vs instance berikutnya.
-       *
-       * Instance pertama:
-       *   Parent = null
-       *   Tags = metadata lengkap
-       *
-       * Instance berikutnya:
-       *   Parent = Series ID
-       *   Tags = InstanceNumber 
+       * Kalau mapping sebelumnya error,
+       * proses ulang image tersebut.
        */
+
       $isFirstInstance =
         empty($orthancSeriesId);
 
-      $tags = $this->buildDicomTags(
-        $biodata,
-        $noradio,
-        $foto,
-        $isFirstInstance
-      );
+      $tags =
+        $this->buildDicomTags(
+          $biodata,
+          $noradio,
+          $foto,
+          $isFirstInstance
+        );
 
       try {
         Yii::info([
-          'event' => 'pacs_migration_create_dicom',
-          'noradio' => $noradio,
-          'rd_foto_id' => $rdFotoId,
-          'NoFoto' => $foto->NoFoto,
+          'event' =>
+          'pacs_migration_create_dicom',
+
+          'noradio' =>
+          $noradio,
+
+          'rd_foto_id' =>
+          $rdFotoId,
+
+          'NoFoto' =>
+          $foto->NoFoto,
+
+          'source_sequence' =>
+          $sourceSequence,
+
           'is_first_instance' =>
           $isFirstInstance,
+
           'parent_study_id' =>
           $orthancStudyId,
+
           'parent_series_id' =>
           $orthancSeriesId,
-          'tags' => $tags,
+
+          'tags' =>
+          $tags,
         ], 'pacs-migration');
 
         /*
          * CREATE DICOM
          *
-         * Foto pertama:
+         * Instance pertama:
          *   Parent = null
          *
-         * Foto berikutnya:
+         * Instance berikutnya:
          *   Parent = Series ID
          */
-        $response = $this->orthanc->createDicom(
-          $foto->foto,
-          $tags,
-          $orthancSeriesId
-        );
+        $response =
+          $this->orthanc->createDicom(
+            $foto->foto,
+            $tags,
+            $orthancSeriesId
+          );
 
         $orthancInstanceId =
-          $response['ID']
-          ?? null;
+          $response['ID'] ?? null;
 
-        if (empty($orthancInstanceId)) {
+        if (
+          empty($orthancInstanceId)
+        ) {
           throw new \RuntimeException(
             'Orthanc create-dicom tidak mengembalikan ID instance.'
           );
@@ -393,24 +524,22 @@ class PacsMigrationService
           ?? $response['ParentSeries']
           ?? null;
 
-        if (empty($currentSeriesId)) {
+        if (
+          empty($currentSeriesId)
+        ) {
           throw new \RuntimeException(
             'Orthanc instance tidak memiliki ParentSeries.'
           );
         }
 
         /*
-         * Pastikan & ceking instance udah masuk ke Series yang benarr.
-         *
-         * Untuk instance pertama, currentSeriesId menjadi
-         * Series utama untuk noradio ini.
-         *
-         * Untuk instance berikutnya, currentSeriesId harus sama juga
-         * dengan orthancSeriesId.
+         * Pastikan Instance masuk
+         * ke Series yang benar.
          */
         if (
           !empty($orthancSeriesId)
-          && $currentSeriesId !== $orthancSeriesId
+          && $currentSeriesId !==
+          $orthancSeriesId
         ) {
           throw new \RuntimeException(
             sprintf(
@@ -438,18 +567,21 @@ class PacsMigrationService
           ?? $orthancStudyId
           ?? null;
 
-        if (empty($currentStudyId)) {
+        if (
+          empty($currentStudyId)
+        ) {
           throw new \RuntimeException(
             'Orthanc series tidak memiliki ParentStudy.'
           );
         }
 
         /*
-         * Pastikan Study ne tetap sama.
+         * Pastikan Study tetap sama.
          */
         if (
           !empty($orthancStudyId)
-          && $currentStudyId !== $orthancStudyId
+          && $currentStudyId !==
+          $orthancStudyId
         ) {
           throw new \RuntimeException(
             sprintf(
@@ -472,7 +604,7 @@ class PacsMigrationService
           );
 
         /*
-         * Ambil UID dari resource masing-masing.
+         * Ambil UID yang dibuat Orthanc.
          */
         $sopInstanceUid =
           $instance['MainDicomTags']['SOPInstanceUID']
@@ -492,24 +624,26 @@ class PacsMigrationService
           || empty($sopInstanceUid)
         ) {
           Yii::error([
-            'event' => 'pacs_migration_uid_incomplete',
-            'noradio' => $noradio,
-            'rd_foto_id' => $rdFotoId,
+            'event' =>
+            'pacs_migration_uid_incomplete',
+
+            'noradio' =>
+            $noradio,
+
+            'rd_foto_id' =>
+            $rdFotoId,
+
+            'source_sequence' =>
+            $sourceSequence,
+
             'orthanc_instance_id' =>
             $orthancInstanceId,
+
             'orthanc_series_id' =>
             $orthancSeriesId,
+
             'orthanc_study_id' =>
             $orthancStudyId,
-            'instance_main_dicom_tags' =>
-            $instance['MainDicomTags']
-              ?? null,
-            'series_main_dicom_tags' =>
-            $series['MainDicomTags']
-              ?? null,
-            'study_main_dicom_tags' =>
-            $study['MainDicomTags']
-              ?? null,
           ], 'pacs-migration');
 
           throw new \RuntimeException(
@@ -518,11 +652,19 @@ class PacsMigrationService
         }
 
         /*
-         * SAVE MAPPING METADATA ORTHANC ne
+         * SAVE MAPPING.
+         *
+         * Identity:
+         *
+         *   noradio + source_sequence
+         *
+         * rd_foto_id tetap disimpan sebagai
+         * reference source legacy.
          */
         $this->saveSuccessMapping(
           $foto,
           $noradio,
+          $sourceSequence,
           $orthancPatientId,
           $orthancStudyId,
           $orthancSeriesId,
@@ -535,49 +677,69 @@ class PacsMigrationService
         $result['success']++;
 
         Yii::info([
-          'event' => 'pacs_migration_success',
-          'noradio' => $noradio,
-          'rd_foto_id' => $rdFotoId,
-          'NoFoto' => $foto->NoFoto,
+          'event' =>
+          'pacs_migration_success',
+
+          'noradio' =>
+          $noradio,
+
+          'rd_foto_id' =>
+          $rdFotoId,
+
+          'NoFoto' =>
+          $foto->NoFoto,
+
+          'source_sequence' =>
+          $sourceSequence,
+
           'orthanc_patient_id' =>
           $orthancPatientId,
+
           'orthanc_study_id' =>
           $orthancStudyId,
+
           'orthanc_series_id' =>
           $orthancSeriesId,
+
           'orthanc_instance_id' =>
           $orthancInstanceId,
+
           'study_instance_uid' =>
           $studyInstanceUid,
+
           'series_instance_uid' =>
           $seriesInstanceUid,
+
           'sop_instance_uid' =>
           $sopInstanceUid,
         ], 'pacs-migration');
       } catch (\Throwable $e) {
         $result['failed']++;
 
-        /*
-         * Penting lur:
-         * saveErrorMapping() hanya UPDATE jika mapping sudah ada.
-         *
-         * Ini untk mencegah INSERT gagal karena kolom UID
-         * di rd_foto_orthanc adalah NOT NULL.
-         */
         try {
           $this->saveErrorMapping(
             $foto,
             $noradio,
+            $sourceSequence,
             $e->getMessage()
           );
         } catch (\Throwable $mappingError) {
           Yii::error([
             'event' =>
             'pacs_migration_error_mapping_failed',
-            'noradio' => $noradio,
-            'rd_foto_id' => $rdFotoId,
+
+            'noradio' =>
+            $noradio,
+
+            'rd_foto_id' =>
+            $rdFotoId,
+
+            'source_sequence' =>
+            $sourceSequence,
+
             'original_error' =>
             $e->getMessage(),
+
             'mapping_error' =>
             $mappingError->getMessage(),
           ], 'pacs-migration');
@@ -586,23 +748,31 @@ class PacsMigrationService
         Yii::error([
           'event' =>
           'pacs_migration_failed',
-          'noradio' => $noradio,
-          'rd_foto_id' => $rdFotoId,
-          'NoFoto' => $foto->NoFoto,
+
+          'noradio' =>
+          $noradio,
+
+          'rd_foto_id' =>
+          $rdFotoId,
+
+          'NoFoto' =>
+          $foto->NoFoto,
+
+          'source_sequence' =>
+          $sourceSequence,
+
           'parent_study_id' =>
           $orthancStudyId,
+
           'parent_series_id' =>
           $orthancSeriesId,
+
           'message' =>
           $e->getMessage(),
         ], 'pacs-migration');
 
         /*
-         * Jangan menghentikan foto berikutnya.
-         *
-         * Contoh:
-         *   foto 1 gagal
-         *   foto 2 tetap dicoba.
+         * Foto berikutnya tetap diproses.
          */
         continue;
       }
@@ -611,15 +781,6 @@ class PacsMigrationService
 
   /**
    * Build DICOM tags.
-   *
-   * Instance pertama:
-   *   metadata Patient + Study + Series + Instance.
-   *
-   * Instance berikutnya:
-   *   hanya InstanceNumber.
-   *
-   * penting misalll ono case karena Patient/Study/Series tags
-   * sudah diwariskan dari Parent Series oleh Orthanc.
    */
   private function buildDicomTags(
     array $biodata,
@@ -627,28 +788,12 @@ class PacsMigrationService
     RdFoto $foto,
     bool $isFirstInstance
   ): array {
-
     /*
-     * Instance berikutnya.
-     *
-     * Jangan kirim:
-     *   PatientID
-     *   PatientName
-     *   AccessionNumber
-     *   StudyID
-     *   StudyDate
-     *   StudyTime
-     *   Modality
-     *   SeriesNumber
-     *   SeriesDescription
-     *   dll.
-     *
-     * Semua sudah diwariskan dari Series parent.
+     * Instance berikutnya hanya
+     * membutuhkan SOPClassUID + InstanceNumber.
      */
     if (!$isFirstInstance) {
       return [
-        // sauce:
-        // https://dicom.nema.org/dicom/2013/output/chtml/part04/sect_i.4.html
         'SOPClassUID' =>
         '1.2.840.10008.5.1.4.1.1.7',
 
@@ -657,38 +802,25 @@ class PacsMigrationService
       ];
     }
 
-    /*
-     * StudyDate / StudyTime
-     *
-     * Menggunakan rd_biodata.tglsave sesuai keputusan migration.
-     */
     $studyDate = null;
     $studyTime = null;
 
     if (!empty($biodata['tglsave'])) {
-      $timestamp = strtotime(
-        $biodata['tglsave']
-      );
+      $timestamp =
+        strtotime(
+          $biodata['tglsave']
+        );
 
       if ($timestamp !== false) {
-        $studyDate = date(
-          'Ymd',
-          $timestamp
-        );
+        $studyDate =
+          date('Ymd', $timestamp);
 
-        $studyTime = date(
-          'His',
-          $timestamp
-        );
+        $studyTime =
+          date('His', $timestamp);
       }
     }
 
-    /*
-     * Metadata utama
-     */
     $tags = [
-      // sauce:
-      // https://dicom.nema.org/dicom/2013/output/chtml/part04/sect_i.4.html
       'SOPClassUID' =>
       '1.2.840.10008.5.1.4.1.1.7',
 
@@ -723,13 +855,14 @@ class PacsMigrationService
       (string) $foto->NoFoto,
     ];
 
-    /*
-     * PatientSex
-     */
     if (!empty($biodata['jk'])) {
-      $jk = strtoupper(trim((string) $biodata['jk']));
+      $jk =
+        strtoupper(
+          trim(
+            (string) $biodata['jk']
+          )
+        );
 
-      // format yang valid di orthanc pake bhs ingris (Laki-laki = M, permempuan = F)
       if ($jk === 'L') {
         $tags['PatientSex'] = 'M';
       } elseif ($jk === 'P') {
@@ -737,13 +870,11 @@ class PacsMigrationService
       }
     }
 
-    /*
-     * PatientBirthDate
-     */
     if (!empty($biodata['tgllahir'])) {
-      $birthTimestamp = strtotime(
-        $biodata['tgllahir']
-      );
+      $birthTimestamp =
+        strtotime(
+          $biodata['tgllahir']
+        );
 
       if ($birthTimestamp !== false) {
         $tags['PatientBirthDate'] =
@@ -754,12 +885,10 @@ class PacsMigrationService
       }
     }
 
-    /*
-     * Study / Series description
-     */
     if (!empty($biodata['procedure_nama'])) {
       $procedureName =
-        (string) $biodata['procedure_nama'];
+        (string)
+        $biodata['procedure_nama'];
 
       $tags['StudyDescription'] =
         $procedureName;
@@ -768,12 +897,10 @@ class PacsMigrationService
         $procedureName;
     }
 
-    /*
-     * Referring physician
-     */
     if (!empty($biodata['doctor_name'])) {
       $tags['ReferringPhysicianName'] =
-        (string) $biodata['doctor_name'];
+        (string)
+        $biodata['doctor_name'];
     }
 
     return $tags;
@@ -781,10 +908,18 @@ class PacsMigrationService
 
   /**
    * Save successful migration mapping.
+   *
+   * Identity:
+   *
+   *   noradio + source_sequence
+   *
+   * rd_foto_id tetap disimpan untuk
+   * source legacy.
    */
   private function saveSuccessMapping(
-    RdFoto $foto,
+    ?RdFoto $foto,
     string $noradio,
+    int $sourceSequence,
     ?string $orthancPatientId,
     ?string $orthancStudyId,
     ?string $orthancSeriesId,
@@ -793,16 +928,22 @@ class PacsMigrationService
     string $seriesInstanceUid,
     string $sopInstanceUid
   ): void {
-    $existing = Yii::$app->db
+    $existing =
+      $this->dbLocal
       ->createCommand(
         'SELECT id
-         FROM rd_foto_orthanc
-         WHERE rd_foto_id = :rd_foto_id
-         LIMIT 1'
+           FROM rd_foto_orthanc
+           WHERE noradio = :noradio
+             AND source_sequence = :source_sequence
+           LIMIT 1'
       )
       ->bindValue(
-        ':rd_foto_id',
-        $foto->getPrimaryKey()
+        ':noradio',
+        $noradio
+      )
+      ->bindValue(
+        ':source_sequence',
+        $sourceSequence
       )
       ->queryOne();
 
@@ -812,6 +953,9 @@ class PacsMigrationService
     $data = [
       'noradio' =>
       $noradio,
+
+      'source_sequence' =>
+      $sourceSequence,
 
       'accession_number' =>
       $noradio,
@@ -847,8 +991,13 @@ class PacsMigrationService
       $now,
     ];
 
+    if ($foto !== null) {
+      $data['rd_foto_id'] =
+        $foto->getPrimaryKey();
+    }
+
     if ($existing) {
-      Yii::$app->db
+      $this->dbLocal
         ->createCommand()
         ->update(
           'rd_foto_orthanc',
@@ -863,13 +1012,15 @@ class PacsMigrationService
       return;
     }
 
-    $data['rd_foto_id'] =
-      $foto->getPrimaryKey();
-
     $data['created_at'] =
       $now;
 
-    Yii::$app->db
+    /*
+     * rd_foto_id tersedia untuk legacy.
+     *
+     * source sharing akan NULL.
+     */
+    $this->dbLocal
       ->createCommand()
       ->insert(
         'rd_foto_orthanc',
@@ -879,40 +1030,41 @@ class PacsMigrationService
   }
 
   /**
-   * Save error hanya jika mapping lokal sudah ada.
+   * Save error hanya jika mapping lokal
+   * sudah ada.
    *
-   * Tidak melakukan INSERT baru karena:
-   *
-   *   study_instance_uid
-   *   series_instance_uid
-   *   sop_instance_uid
-   *
-   * adalah NOT NULL di database.
+   * Tidak INSERT mapping error baru karena
+   * UID DICOM masih NOT NULL pada schema existing.
    */
   private function saveErrorMapping(
-    RdFoto $foto,
+    ?RdFoto $foto,
     string $noradio,
+    int $sourceSequence,
     string $errorMessage
   ): void {
-    $existing = Yii::$app->db
+    $existing =
+      $this->dbLocal
       ->createCommand(
         'SELECT id
-         FROM rd_foto_orthanc
-         WHERE rd_foto_id = :rd_foto_id
-         LIMIT 1'
+           FROM rd_foto_orthanc
+           WHERE noradio = :noradio
+             AND source_sequence = :source_sequence
+           LIMIT 1'
       )
       ->bindValue(
-        ':rd_foto_id',
-        $foto->getPrimaryKey()
+        ':noradio',
+        $noradio
+      )
+      ->bindValue(
+        ':source_sequence',
+        $sourceSequence
       )
       ->queryOne();
 
     /*
-     * Tidak ada mapping sebelumnya.
+     * Belum ada registry.
      *
-     * Jangan INSERT karena UID wajib NOT NULL.
-     *
-     * Error tetap dicatat ke Yii log.
+     * Jangan INSERT karena UID NOT NULL.
      */
     if (!$existing) {
       Yii::warning([
@@ -923,7 +1075,10 @@ class PacsMigrationService
         $noradio,
 
         'rd_foto_id' =>
-        $foto->getPrimaryKey(),
+        $foto?->getPrimaryKey(),
+
+        'source_sequence' =>
+        $sourceSequence,
 
         'message' =>
         $errorMessage,
@@ -932,7 +1087,7 @@ class PacsMigrationService
       return;
     }
 
-    Yii::$app->db
+    $this->dbLocal
       ->createCommand()
       ->update(
         'rd_foto_orthanc',

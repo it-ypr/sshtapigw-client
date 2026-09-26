@@ -6,29 +6,58 @@ use Yii;
 use yii\db\Query;
 use RuntimeException;
 
+/** @package common\services\SshtApiGwClient\extensions\pacs 
+ *
+ * PacsSharingService
+ * services untuk import data dari shared media storage ke orthanc pacs
+ */
 class PacsSharingService
 {
   private OrthancService $orthanc;
 
+  private PacsLockService $lock;
+
   private string $sharingPath;
+
+  private $dbLocal;
 
   public function __construct(
     string $sharingPath,
-    ?OrthancService $orthanc = null
+    ?OrthancService $orthanc = null,
+    ?PacsLockService $lock = null
   ) {
-    $this->sharingPath = rtrim($sharingPath, DIRECTORY_SEPARATOR);
-    $this->orthanc = $orthanc ?? new OrthancService();
+    $this->sharingPath =
+      rtrim(
+        $sharingPath,
+        DIRECTORY_SEPARATOR
+      );
+
+    $this->orthanc =
+      $orthanc ?? new OrthancService();
+
+    $this->lock =
+      $lock ?? new PacsLockService();
+
+    $this->dbLocal =
+      Yii::$app->db;
   }
 
   /**
-   * Process seluruh file JPG dari folder sharing.
+   * Process file sharing.
    *
-   * Filename:
-   *   {noradio}-{n}.jpg
+   * Struktur:
    *
-   * Example:
-   *   RAD001-1.jpg
-   *   RAD001-2.jpg
+   * /sharing/YYYY/MM/DD/{noradio}-{sequence}.jpg
+   *
+   * Contoh:
+   *
+   * /sharing/2026/09/25/RAD001-1.jpg
+   * /sharing/2026/09/25/RAD001-2.jpg
+   *
+   * Recovery window:
+   *
+   *   hari ini
+   *   + 2 hari sebelumnya
    */
   public function process(): array
   {
@@ -46,39 +75,76 @@ class PacsSharingService
       );
     }
 
-    $files = glob(
-      $this->sharingPath . DIRECTORY_SEPARATOR . '*.jpg'
-    );
-
-    if ($files === false) {
-      throw new RuntimeException(
-        "Gagal membaca folder sharing: {$this->sharingPath}"
-      );
-    }
-
     $groups = [];
 
-    foreach ($files as $file) {
-      $parsed = $this->parseFilename($file);
+    /*
+     * Scan hari ini + 2 hari sebelumnya.
+     */
+    for ($i = 0; $i <= 2; $i++) {
+      $timestamp =
+        strtotime("-{$i} days");
 
-      if ($parsed === null) {
+      $datePath =
+        $this->sharingPath
+        . DIRECTORY_SEPARATOR
+        . date('Y', $timestamp)
+        . DIRECTORY_SEPARATOR
+        . date('m', $timestamp)
+        . DIRECTORY_SEPARATOR
+        . date('d', $timestamp);
+
+      if (!is_dir($datePath)) {
+        continue;
+      }
+
+      $files = glob(
+        $datePath
+          . DIRECTORY_SEPARATOR
+          . '*.jpg'
+      );
+
+      if ($files === false) {
         Yii::warning([
-          'event' => 'pacs_sharing_invalid_filename',
-          'file' => $file,
-        ], 'pacs-sharing');
+          'event' =>
+          'pacs_sharing_scan_failed',
 
-        $result['skipped']++;
+          'path' =>
+          $datePath,
+        ], 'pacs-sharing');
 
         continue;
       }
 
-      $groups[$parsed['noradio']][] = $parsed;
+      foreach ($files as $file) {
+        $parsed =
+          $this->parseFilename($file);
+
+        if ($parsed === null) {
+          Yii::warning([
+            'event' =>
+            'pacs_sharing_invalid_filename',
+
+            'file' =>
+            $file,
+          ], 'pacs-sharing');
+
+          $result['skipped']++;
+
+          continue;
+        }
+
+        $groups[$parsed['noradio']][] = $parsed;
+      }
     }
 
-    $result['total_noradio'] = count($groups);
+    $result['total_noradio'] =
+      count($groups);
 
-    foreach ($groups as $noradio => $items) {
-      $result['total_file'] += count($items);
+    foreach (
+      $groups as $noradio => $items
+    ) {
+      $result['total_file'] +=
+        count($items);
 
       $this->processNoradio(
         (string) $noradio,
@@ -91,20 +157,54 @@ class PacsSharingService
   }
 
   /**
-   * Process seluruh image untuk satu noradio.
-   *
-   * 1 Study
-   * 1 Series
-   * N Instance
-   *
-   * @param array<int, array{
-   *     file:string,
-   *     filename:string,
-   *     noradio:string,
-   *     sequence:int
-   * }> $files
+   * Acquire lock per noradio.
    */
   private function processNoradio(
+    string $noradio,
+    array $files,
+    array &$result
+  ): void {
+    $locked =
+      $this->lock->acquire(
+        $noradio,
+        0
+      );
+
+    if (!$locked) {
+      Yii::warning([
+        'event' =>
+        'pacs_sharing_lock_failed',
+
+        'noradio' =>
+        $noradio,
+      ], 'pacs-sharing');
+
+      return;
+    }
+
+    try {
+      $this->processNoradioLocked(
+        $noradio,
+        $files,
+        $result
+      );
+    } finally {
+      $this->lock->release(
+        $noradio
+      );
+    }
+  }
+
+  /**
+   * Process seluruh image untuk satu noradio.
+   *
+   * Rule:
+   *
+   *   1 Study
+   *   1 Series
+   *   N Instance
+   */
+  private function processNoradioLocked(
     string $noradio,
     array $files,
     array &$result
@@ -112,119 +212,332 @@ class PacsSharingService
     /*
      * Ambil metadata SIMRS.
      */
-    $metadata = $this->resolveMetadata($noradio);
+    $metadata =
+      $this->resolveMetadata(
+        $noradio
+      );
 
     if ($metadata === null) {
       Yii::warning([
-        'event' => 'pacs_sharing_metadata_not_found',
-        'noradio' => $noradio,
+        'event' =>
+        'pacs_sharing_metadata_not_found',
+
+        'noradio' =>
+        $noradio,
       ], 'pacs-sharing');
 
-      $result['failed'] += count($files);
+      $result['failed'] +=
+        count($files);
 
       return;
     }
 
     /*
-     * Urutkan berdasarkan sequence.
+     * Urutkan berdasarkan source_sequence.
      */
     usort(
       $files,
-      static fn(array $a, array $b): int =>
-      $a['sequence'] <=> $b['sequence']
+      static fn(
+        array $a,
+        array $b
+      ): int =>
+      $a['sequence']
+        <=>
+        $b['sequence']
     );
 
     /*
-     * Cari Study yang sudah ada.
+     * Cari mapping existing untuk
+     * mendapatkan Study/Series.
      */
-    $orthancStudyId =
-      $this->orthanc->findStudyByAccessionNumber(
-        $noradio
+    $existingMapping =
+      (new Query())
+      ->from('rd_foto_orthanc')
+      ->where([
+        'noradio' =>
+        $noradio,
+
+        'status' =>
+        1,
+      ])
+      ->andWhere([
+        'not',
+        [
+          'orthanc_study_id' =>
+          null,
+        ],
+      ])
+      ->orderBy([
+        'id' =>
+        SORT_ASC,
+      ])
+      ->one(
+        $this->dbLocal
       );
 
-    $orthancSeriesId = null;
+    $orthancStudyId =
+      $existingMapping['orthanc_study_id'] ?? null;
+
+    $orthancSeriesId =
+      $existingMapping['orthanc_series_id'] ?? null;
 
     /*
-     * Kalau Study sudah ada, ambil Series pertama.
+     * Kalau registry belum punya Study,
+     * coba cari langsung di Orthanc.
      */
-    if ($orthancStudyId !== null) {
-      $study = $this->orthanc->getStudy(
-        $orthancStudyId
-      );
+    if (empty($orthancStudyId)) {
+      try {
+        $orthancStudyId =
+          $this->orthanc
+          ->findStudyByAccessionNumber(
+            $noradio
+          );
+      } catch (\Throwable $e) {
+        Yii::warning([
+          'event' =>
+          'pacs_sharing_find_study_failed',
 
-      $orthancSeriesId =
-        $study['Series'][0] ?? null;
+          'noradio' =>
+          $noradio,
 
-      if ($orthancSeriesId === null) {
-        throw new RuntimeException(
-          "Study {$orthancStudyId} tidak memiliki Series."
-        );
+          'message' =>
+          $e->getMessage(),
+        ], 'pacs-sharing');
+      }
+    }
+
+    /*
+     * Kalau Study ada tapi Series belum diketahui,
+     * ambil Series pertama.
+     */
+    if (
+      !empty($orthancStudyId)
+      && empty($orthancSeriesId)
+    ) {
+      try {
+        $study =
+          $this->orthanc->getStudy(
+            $orthancStudyId
+          );
+
+        $orthancSeriesId =
+          $study['Series'][0]
+          ?? null;
+
+        if (
+          empty($orthancSeriesId)
+        ) {
+          throw new RuntimeException(
+            "Study {$orthancStudyId} tidak memiliki Series."
+          );
+        }
+      } catch (\Throwable $e) {
+        Yii::error([
+          'event' =>
+          'pacs_sharing_get_study_failed',
+
+          'noradio' =>
+          $noradio,
+
+          'orthanc_study_id' =>
+          $orthancStudyId,
+
+          'message' =>
+          $e->getMessage(),
+        ], 'pacs-sharing');
+
+        $result['failed'] +=
+          count($files);
+
+        return;
       }
     }
 
     foreach ($files as $file) {
-      try {
-        $this->processFile(
-          $file,
-          $metadata,
-          $orthancStudyId,
-          $orthancSeriesId
+      /*
+       * Identity:
+       *
+       *   noradio + source_sequence
+       */
+      $mapping =
+        (new Query())
+        ->from('rd_foto_orthanc')
+        ->where([
+          'noradio' =>
+          $noradio,
+
+          'source_sequence' =>
+          $file['sequence'],
+        ])
+        ->one(
+          $this->dbLocal
         );
 
+      /*
+       * Sudah berhasil dibuat?
+       *
+       * Jangan create ulang.
+       */
+      if (
+        $mapping
+        && (int) $mapping['status'] === 1
+        && !empty($mapping['orthanc_instance_id'])
+      ) {
+        $result['skipped']++;
+
         /*
-         * processFile() bisa menghasilkan Study/Series
-         * baru pada instance pertama.
-         *
-         * Karena itu hierarchy kita ambil ulang
-         * dari Orthanc setelah create.
+         * Recovery hierarchy.
          */
-        if ($orthancStudyId === null) {
+        if (
+          empty($orthancStudyId)
+          && !empty($mapping['orthanc_study_id'])
+        ) {
           $orthancStudyId =
-            $this->orthanc->findStudyByAccessionNumber(
-              $noradio
-            );
+            $mapping['orthanc_study_id'];
         }
 
         if (
-          $orthancStudyId !== null
-          && $orthancSeriesId === null
+          empty($orthancSeriesId)
+          && !empty($mapping['orthanc_series_id'])
         ) {
-          $study = $this->orthanc->getStudy(
-            $orthancStudyId
+          $orthancSeriesId =
+            $mapping['orthanc_series_id'];
+        }
+
+        Yii::info([
+          'event' =>
+          'pacs_sharing_skipped',
+
+          'noradio' =>
+          $noradio,
+
+          'filename' =>
+          $file['filename'],
+
+          'sequence' =>
+          $file['sequence'],
+
+          'orthanc_instance_id' =>
+          $mapping['orthanc_instance_id'],
+        ], 'pacs-sharing');
+
+        continue;
+      }
+
+      try {
+        /*
+         * Kalau belum ada registry,
+         * create DICOM.
+         */
+        $created =
+          $this->processFile(
+            $file,
+            $metadata,
+            $orthancStudyId,
+            $orthancSeriesId
           );
 
-          $orthancSeriesId =
-            $study['Series'][0] ?? null;
-        }
+        /*
+         * processFile() mengembalikan
+         * hierarchy aktual dari Orthanc.
+         */
+        $orthancStudyId =
+          $created['orthanc_study_id'];
+
+        $orthancSeriesId =
+          $created['orthanc_series_id'];
 
         $result['success']++;
       } catch (\Throwable $e) {
         $result['failed']++;
 
+        /*
+         * Kalau registry sudah ada,
+         * simpan error.
+         *
+         * Kalau belum ada, jangan INSERT
+         * karena UID masih NOT NULL.
+         */
+        try {
+          $this->saveErrorMapping(
+            $noradio,
+            (int) $file['sequence'],
+            $e->getMessage()
+          );
+        } catch (\Throwable $mappingError) {
+          Yii::error([
+            'event' =>
+            'pacs_sharing_error_mapping_failed',
+
+            'noradio' =>
+            $noradio,
+
+            'filename' =>
+            $file['filename'],
+
+            'sequence' =>
+            $file['sequence'],
+
+            'original_error' =>
+            $e->getMessage(),
+
+            'mapping_error' =>
+            $mappingError->getMessage(),
+          ], 'pacs-sharing');
+        }
+
         Yii::error([
-          'event' => 'pacs_sharing_file_failed',
-          'noradio' => $noradio,
-          'filename' => $file['filename'],
-          'sequence' => $file['sequence'],
-          'message' => $e->getMessage(),
-          'trace' => $e->getTraceAsString(),
+          'event' =>
+          'pacs_sharing_file_failed',
+
+          'noradio' =>
+          $noradio,
+
+          'filename' =>
+          $file['filename'],
+
+          'sequence' =>
+          $file['sequence'],
+
+          'orthanc_study_id' =>
+          $orthancStudyId,
+
+          'orthanc_series_id' =>
+          $orthancSeriesId,
+
+          'message' =>
+          $e->getMessage(),
         ], 'pacs-sharing');
+
+        /*
+         * File berikutnya tetap dicoba.
+         */
+        continue;
       }
     }
   }
 
   /**
    * Process satu image.
+   *
+   * Return:
+   *
+   * [
+   *   'orthanc_study_id' => ...,
+   *   'orthanc_series_id' => ...,
+   *   'orthanc_instance_id' => ...,
+   * ]
    */
   private function processFile(
     array $file,
     array $metadata,
     ?string $orthancStudyId,
     ?string $orthancSeriesId
-  ): void {
-    $imageBinary = file_get_contents(
-      $file['file']
-    );
+  ): array {
+    $imageBinary =
+      file_get_contents(
+        $file['file']
+      );
 
     if ($imageBinary === false) {
       throw new RuntimeException(
@@ -232,62 +545,104 @@ class PacsSharingService
       );
     }
 
+    /*
+     * Kalau belum ada Series berarti
+     * ini instance pertama.
+     */
     $isFirstInstance =
       $orthancSeriesId === null;
 
-    $tags = $this->buildDicomTags(
-      $metadata,
-      $file['noradio'],
-      $file['sequence'],
-      $isFirstInstance
-    );
+    $tags =
+      $this->buildDicomTags(
+        $metadata,
+        $file['noradio'],
+        $file['sequence'],
+        $isFirstInstance
+      );
 
     Yii::info([
-      'event' => 'pacs_sharing_create_dicom',
-      'noradio' => $file['noradio'],
-      'filename' => $file['filename'],
-      'sequence' => $file['sequence'],
-      'is_first_instance' => $isFirstInstance,
-      'orthanc_study_id' => $orthancStudyId,
-      'orthanc_series_id' => $orthancSeriesId,
+      'event' =>
+      'pacs_sharing_create_dicom',
+
+      'noradio' =>
+      $file['noradio'],
+
+      'filename' =>
+      $file['filename'],
+
+      'sequence' =>
+      $file['sequence'],
+
+      'is_first_instance' =>
+      $isFirstInstance,
+
+      'orthanc_study_id' =>
+      $orthancStudyId,
+
+      'orthanc_series_id' =>
+      $orthancSeriesId,
     ], 'pacs-sharing');
 
-    $response = $this->orthanc->createDicom(
-      $imageBinary,
-      $tags,
-      $orthancSeriesId
-    );
+    /*
+     * CREATE DICOM
+     *
+     * Instance pertama:
+     *   Parent = null
+     *
+     * Instance berikutnya:
+     *   Parent = Series ID
+     */
+    $response =
+      $this->orthanc->createDicom(
+        $imageBinary,
+        $tags,
+        $orthancSeriesId
+      );
 
     $orthancInstanceId =
       $response['ID'] ?? null;
 
-    if (empty($orthancInstanceId)) {
+    if (
+      empty($orthancInstanceId)
+    ) {
       throw new RuntimeException(
         'Orthanc create-dicom tidak mengembalikan ID instance.'
       );
     }
 
     /*
-     * Ambil hierarchy instance.
+     * GET INSTANCE
      */
-    $instance = $this->orthanc->getInstance(
-      $orthancInstanceId
-    );
+    $instance =
+      $this->orthanc->getInstance(
+        $orthancInstanceId
+      );
+
+    $orthancPatientId =
+      $instance['ParentPatient']
+      ?? $response['ParentPatient']
+      ?? null;
 
     $currentSeriesId =
       $instance['ParentSeries']
       ?? $response['ParentSeries']
       ?? null;
 
-    if (empty($currentSeriesId)) {
+    if (
+      empty($currentSeriesId)
+    ) {
       throw new RuntimeException(
         'Orthanc instance tidak memiliki ParentSeries.'
       );
     }
 
+    /*
+     * Pastikan Series sama.
+     */
     if (
-      $orthancSeriesId !== null
-      && $currentSeriesId !== $orthancSeriesId
+      !empty($orthancSeriesId)
+      && $currentSeriesId !==
+      $orthancSeriesId
     ) {
       throw new RuntimeException(
         sprintf(
@@ -299,11 +654,12 @@ class PacsSharingService
     }
 
     /*
-     * Validasi Study.
+     * GET SERIES
      */
-    $series = $this->orthanc->getSeries(
-      $currentSeriesId
-    );
+    $series =
+      $this->orthanc->getSeries(
+        $currentSeriesId
+      );
 
     $currentStudyId =
       $series['ParentStudy']
@@ -311,15 +667,21 @@ class PacsSharingService
       ?? $orthancStudyId
       ?? null;
 
-    if (empty($currentStudyId)) {
+    if (
+      empty($currentStudyId)
+    ) {
       throw new RuntimeException(
         'Orthanc Series tidak memiliki ParentStudy.'
       );
     }
 
+    /*
+     * Pastikan Study sama.
+     */
     if (
-      $orthancStudyId !== null
-      && $currentStudyId !== $orthancStudyId
+      !empty($orthancStudyId)
+      && $currentStudyId !==
+      $orthancStudyId
     ) {
       throw new RuntimeException(
         sprintf(
@@ -331,96 +693,118 @@ class PacsSharingService
     }
 
     /*
-   * Semua validasi Orthanc berhasil.
-   *
-   * Pindahkan source file ke:
-   *
-   * sharing/processed/
-   *
-   * Supaya cron berikutnya tidak memproses
-   * file yang sama lagi.
-   */
-    $this->moveToProcessed(
-      $file['file']
-    );
-
-    Yii::info([
-      'event' => 'pacs_sharing_file_success',
-      'noradio' => $file['noradio'],
-      'filename' => $file['filename'],
-      'sequence' => $file['sequence'],
-      'orthanc_instance_id' => $orthancInstanceId,
-      'orthanc_series_id' => $currentSeriesId,
-      'orthanc_study_id' => $currentStudyId,
-    ], 'pacs-sharing');
-  }
-
-  /**
-   * Pindahkan file yang sudah berhasil
-   * diproses ke folder processed.
-   */
-  private function moveToProcessed(
-    string $file
-  ): void {
-    $processedPath =
-      $this->sharingPath
-      . DIRECTORY_SEPARATOR
-      . 'processed';
-
-    if (!is_dir($processedPath)) {
-      if (
-        !mkdir(
-          $processedPath,
-          0775,
-          true
-        )
-        && !is_dir($processedPath)
-      ) {
-        throw new RuntimeException(
-          "Gagal membuat folder processed: {$processedPath}"
-        );
-      }
-    }
-
-    $filename = basename($file);
-
-    $destination =
-      $processedPath
-      . DIRECTORY_SEPARATOR
-      . $filename;
+     * GET STUDY
+     */
+    $study =
+      $this->orthanc->getStudy(
+        $currentStudyId
+      );
 
     /*
-   * Jangan overwrite file yang sudah ada.
-   */
-    if (file_exists($destination)) {
+     * Ambil UID yang dibuat Orthanc.
+     */
+    $sopInstanceUid =
+      $instance['MainDicomTags']['SOPInstanceUID']
+      ?? null;
+
+    $seriesInstanceUid =
+      $series['MainDicomTags']['SeriesInstanceUID']
+      ?? null;
+
+    $studyInstanceUid =
+      $study['MainDicomTags']['StudyInstanceUID']
+      ?? null;
+
+    if (
+      empty($studyInstanceUid)
+      || empty($seriesInstanceUid)
+      || empty($sopInstanceUid)
+    ) {
       throw new RuntimeException(
-        "File tujuan sudah ada: {$destination}"
+        'UID DICOM tidak lengkap pada hierarchy Orthanc.'
       );
     }
 
-    if (!rename($file, $destination)) {
-      throw new RuntimeException(
-        "Gagal memindahkan file ke: {$destination}"
-      );
-    }
+    /*
+     * SAVE REGISTRY.
+     *
+     * rd_foto_id = NULL karena source
+     * berasal dari sharing.
+     */
+    $this->saveSuccessMapping(
+      $file['noradio'],
+      (int) $file['sequence'],
+      $orthancPatientId,
+      $currentStudyId,
+      $currentSeriesId,
+      $orthancInstanceId,
+      $studyInstanceUid,
+      $seriesInstanceUid,
+      $sopInstanceUid
+    );
+
+    /*
+     * Source JPG TIDAK dipindahkan.
+     *
+     * File tetap berada di:
+     *
+     * /sharing/YYYY/MM/DD/
+     */
 
     Yii::info([
-      'event' => 'pacs_sharing_file_moved',
-      'source' => $file,
-      'destination' => $destination,
+      'event' =>
+      'pacs_sharing_file_success',
+
+      'noradio' =>
+      $file['noradio'],
+
+      'filename' =>
+      $file['filename'],
+
+      'sequence' =>
+      $file['sequence'],
+
+      'orthanc_instance_id' =>
+      $orthancInstanceId,
+
+      'orthanc_series_id' =>
+      $currentSeriesId,
+
+      'orthanc_study_id' =>
+      $currentStudyId,
+
+      'study_instance_uid' =>
+      $studyInstanceUid,
+
+      'series_instance_uid' =>
+      $seriesInstanceUid,
+
+      'sop_instance_uid' =>
+      $sopInstanceUid,
     ], 'pacs-sharing');
+
+    return [
+      'orthanc_study_id' =>
+      $currentStudyId,
+
+      'orthanc_series_id' =>
+      $currentSeriesId,
+
+      'orthanc_instance_id' =>
+      $orthancInstanceId,
+    ];
   }
 
   /**
    * Parse:
    *
-   * {noradio}-{n}.jpg
+   * {noradio}-{sequence}.jpg
    *
    * Contoh:
    *
    * RAD-2026-001-3.jpg
    *
-   * menghasilkan:
+   * =>
    *
    * noradio  = RAD-2026-001
    * sequence = 3
@@ -428,7 +812,8 @@ class PacsSharingService
   private function parseFilename(
     string $file
   ): ?array {
-    $filename = basename($file);
+    $filename =
+      basename($file);
 
     if (
       !preg_match(
@@ -440,18 +825,31 @@ class PacsSharingService
       return null;
     }
 
-    $noradio = trim($matches[1]);
-    $sequence = (int) $matches[2];
+    $noradio =
+      trim($matches[1]);
 
-    if ($noradio === '' || $sequence < 1) {
+    $sequence =
+      (int) $matches[2];
+
+    if (
+      $noradio === ''
+      || $sequence < 1
+    ) {
       return null;
     }
 
     return [
-      'file' => $file,
-      'filename' => $filename,
-      'noradio' => $noradio,
-      'sequence' => $sequence,
+      'file' =>
+      $file,
+
+      'filename' =>
+      $filename,
+
+      'noradio' =>
+      $noradio,
+
+      'sequence' =>
+      $sequence,
     ];
   }
 
@@ -497,24 +895,20 @@ class PacsSharingService
         'muser.nik = rd_biodata.dperiksa'
       )
       ->where([
-        'rd_biodata.noradio' => $noradio,
-        'rd_biodata.ondelete' => 0,
-        'rdp.kondisi' => 1,
+        'rd_biodata.noradio' =>
+        $noradio,
+
+        'rd_biodata.ondelete' =>
+        0,
+
+        'rdp.kondisi' =>
+        1,
       ])
       ->one();
   }
 
   /**
    * Build DICOM tags.
-   *
-   * Instance pertama:
-   *   metadata Patient + Study + Series + Instance.
-   *
-   * Instance berikutnya:
-   *   hanya metadata instance.
-   *
-   * Metadata Study/Series pada instance berikutnya
-   * akan mengikuti Series parent di Orthanc.
    */
   private function buildDicomTags(
     array $metadata,
@@ -523,11 +917,11 @@ class PacsSharingService
     bool $isFirstInstance
   ): array {
     /*
-   * Instance berikutnya.
-   *
-   * Jangan kirim ulang metadata Study/Series.
-   * Parent Series sudah menentukan hierarchy instance.
-   */
+     * Instance berikutnya.
+     *
+     * Metadata Study/Series diwariskan
+     * dari Parent Series.
+     */
     if (!$isFirstInstance) {
       return [
         'SOPClassUID' =>
@@ -538,51 +932,51 @@ class PacsSharingService
       ];
     }
 
-    /*
-   * StudyDate / StudyTime
-   *
-   * Menggunakan rd_biodata.tglsave,
-   * sama seperti PacsMigrationService.
-   */
     $studyDate = null;
     $studyTime = null;
 
     if (!empty($metadata['tglsave'])) {
-      $timestamp = strtotime(
-        $metadata['tglsave']
-      );
+      $timestamp =
+        strtotime(
+          $metadata['tglsave']
+        );
 
       if ($timestamp !== false) {
-        $studyDate = date(
-          'Ymd',
-          $timestamp
-        );
+        $studyDate =
+          date(
+            'Ymd',
+            $timestamp
+          );
 
-        $studyTime = date(
-          'His',
-          $timestamp
-        );
+        $studyTime =
+          date(
+            'His',
+            $timestamp
+          );
       }
     }
 
-    /*
-   * Metadata utama.
-   */
     $tags = [
       'SOPClassUID' =>
       '1.2.840.10008.5.1.4.1.1.7',
 
       'PatientID' =>
-      (string) ($metadata['rm'] ?? ''),
+      (string) (
+        $metadata['rm'] ?? ''
+      ),
 
       'PatientName' =>
-      (string) ($metadata['nama'] ?? ''),
+      (string) (
+        $metadata['nama'] ?? ''
+      ),
 
       'StudyDate' =>
-      $studyDate ?? date('Ymd'),
+      $studyDate
+        ?? date('Ymd'),
 
       'StudyTime' =>
-      $studyTime ?? date('His'),
+      $studyTime
+        ?? date('His'),
 
       'AccessionNumber' =>
       $noradio,
@@ -592,8 +986,7 @@ class PacsSharingService
 
       'Modality' =>
       (string) (
-        $metadata['procedure_modality']
-        ?? ''
+        $metadata['procedure_modality'] ?? ''
       ),
 
       'SeriesNumber' =>
@@ -604,34 +997,34 @@ class PacsSharingService
     ];
 
     /*
-   * PatientSex.
-   */
+     * PatientSex.
+     */
     if (!empty($metadata['jk'])) {
-      $jk = strtoupper(
-        trim((string) $metadata['jk'])
-      );
+      $jk =
+        strtoupper(
+          trim(
+            (string)
+            $metadata['jk']
+          )
+        );
 
-      // SIMRS:
-      // L = Laki-laki
-      // P = Perempuan
-      //
-      // DICOM:
-      // M = Male
-      // F = Female
       if ($jk === 'L') {
-        $tags['PatientSex'] = 'M';
+        $tags['PatientSex'] =
+          'M';
       } elseif ($jk === 'P') {
-        $tags['PatientSex'] = 'F';
+        $tags['PatientSex'] =
+          'F';
       }
     }
 
     /*
-   * PatientBirthDate.
-   */
+     * PatientBirthDate.
+     */
     if (!empty($metadata['tgllahir'])) {
-      $birthTimestamp = strtotime(
-        $metadata['tgllahir']
-      );
+      $birthTimestamp =
+        strtotime(
+          $metadata['tgllahir']
+        );
 
       if ($birthTimestamp !== false) {
         $tags['PatientBirthDate'] =
@@ -643,11 +1036,14 @@ class PacsSharingService
     }
 
     /*
-   * Study / Series description.
-   */
-    if (!empty($metadata['procedure_nama'])) {
+     * Study / Series description.
+     */
+    if (
+      !empty($metadata['procedure_nama'])
+    ) {
       $procedureName =
-        (string) $metadata['procedure_nama'];
+        (string)
+        $metadata['procedure_nama'];
 
       $tags['StudyDescription'] =
         $procedureName;
@@ -657,13 +1053,216 @@ class PacsSharingService
     }
 
     /*
-   * Referring physician.
-   */
-    if (!empty($metadata['doctor_name'])) {
+     * Referring physician.
+     */
+    if (
+      !empty($metadata['doctor_name'])
+    ) {
       $tags['ReferringPhysicianName'] =
-        (string) $metadata['doctor_name'];
+        (string)
+        $metadata['doctor_name'];
     }
 
     return $tags;
+  }
+
+  /**
+   * Save successful sharing mapping.
+   *
+   * rd_foto_id sengaja NULL karena
+   * source berasal dari sharing.
+   *
+   * Identity:
+   *
+   *   noradio + source_sequence
+   */
+  private function saveSuccessMapping(
+    string $noradio,
+    int $sourceSequence,
+    ?string $orthancPatientId,
+    ?string $orthancStudyId,
+    ?string $orthancSeriesId,
+    string $orthancInstanceId,
+    string $studyInstanceUid,
+    string $seriesInstanceUid,
+    string $sopInstanceUid
+  ): void {
+    $existing =
+      $this->dbLocal
+      ->createCommand(
+        'SELECT id
+           FROM rd_foto_orthanc
+           WHERE noradio = :noradio
+             AND source_sequence = :source_sequence
+           LIMIT 1'
+      )
+      ->bindValue(
+        ':noradio',
+        $noradio
+      )
+      ->bindValue(
+        ':source_sequence',
+        $sourceSequence
+      )
+      ->queryOne();
+
+    $now =
+      date('Y-m-d H:i:s');
+
+    $data = [
+      'noradio' =>
+      $noradio,
+
+      'source_sequence' =>
+      $sourceSequence,
+
+      'rd_foto_id' =>
+      null,
+
+      'accession_number' =>
+      $noradio,
+
+      'orthanc_patient_id' =>
+      $orthancPatientId,
+
+      'orthanc_study_id' =>
+      $orthancStudyId,
+
+      'orthanc_series_id' =>
+      $orthancSeriesId,
+
+      'orthanc_instance_id' =>
+      $orthancInstanceId,
+
+      'study_instance_uid' =>
+      $studyInstanceUid,
+
+      'series_instance_uid' =>
+      $seriesInstanceUid,
+
+      'sop_instance_uid' =>
+      $sopInstanceUid,
+
+      'status' =>
+      1,
+
+      'error_message' =>
+      null,
+
+      'updated_at' =>
+      $now,
+    ];
+
+    if ($existing) {
+      /*
+       * Jangan overwrite rd_foto_id kalau
+       * ternyata mapping ini sebelumnya
+       * berasal dari legacy.
+       *
+       * Ini penting kalau sharing menemukan
+       * mapping legacy yang sudah ada.
+       */
+      unset(
+        $data['rd_foto_id']
+      );
+
+      $this->dbLocal
+        ->createCommand()
+        ->update(
+          'rd_foto_orthanc',
+          $data,
+          [
+            'id' =>
+            $existing['id'],
+          ]
+        )
+        ->execute();
+
+      return;
+    }
+
+    $data['created_at'] =
+      $now;
+
+    $this->dbLocal
+      ->createCommand()
+      ->insert(
+        'rd_foto_orthanc',
+        $data
+      )
+      ->execute();
+  }
+
+  /**
+   * Save error hanya jika registry
+   * sudah ada.
+   *
+   * Tidak INSERT baru karena UID
+   * masih NOT NULL pada schema existing.
+   */
+  private function saveErrorMapping(
+    string $noradio,
+    int $sourceSequence,
+    string $errorMessage
+  ): void {
+    $existing =
+      $this->dbLocal
+      ->createCommand(
+        'SELECT id
+           FROM rd_foto_orthanc
+           WHERE noradio = :noradio
+             AND source_sequence = :source_sequence
+           LIMIT 1'
+      )
+      ->bindValue(
+        ':noradio',
+        $noradio
+      )
+      ->bindValue(
+        ':source_sequence',
+        $sourceSequence
+      )
+      ->queryOne();
+
+    if (!$existing) {
+      Yii::warning([
+        'event' =>
+        'pacs_sharing_mapping_not_saved',
+
+        'noradio' =>
+        $noradio,
+
+        'source_sequence' =>
+        $sourceSequence,
+
+        'message' =>
+        $errorMessage,
+      ], 'pacs-sharing');
+
+      return;
+    }
+
+    $this->dbLocal
+      ->createCommand()
+      ->update(
+        'rd_foto_orthanc',
+        [
+          'status' =>
+          2,
+
+          'error_message' =>
+          $errorMessage,
+
+          'updated_at' =>
+          date(
+            'Y-m-d H:i:s'
+          ),
+        ],
+        [
+          'id' =>
+          $existing['id'],
+        ]
+      )
+      ->execute();
   }
 }
