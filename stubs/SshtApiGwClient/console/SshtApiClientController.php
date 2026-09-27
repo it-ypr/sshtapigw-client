@@ -106,17 +106,17 @@ class SshtApiClientController extends Controller
   {
     // // UGD - inprogress 
     // // // encounter & diagnosa
-    // $this->actionSendEncounterUgd($tgl_param);
+    $this->actionSendEncounterUgd($tgl_param);
     // // // // observasi vital
-    // $this->actionSendObservationUgd($tgl_param);
+    $this->actionSendObservationUgd($tgl_param);
     // // // // general procedure
-    // $this->actionSendProcedureGeneralUgd($tgl_param);
+    $this->actionSendProcedureGeneralUgd($tgl_param);
     // // // // // serviceRequest Radiologi
-    // $this->actionSendServiceRequestRadioUgd($tgl_param);
+    $this->actionSendServiceRequestRadioUgd($tgl_param);
     // // // // imagingStudy
-    // $this->actionSendImagingStudyUgd($tgl_param);
+    $this->actionSendImagingStudyUgd($tgl_param);
     // // observation & diagnosticReport Radiologi
-    // $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
+    $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
     // // medicationRequest & medicationDispense (inprogress)
     // $this->actionGenerateMedicationRequestUgd($tgl_param);
     // // send medicationRequest manual (CLI/command prompt):
@@ -132,10 +132,10 @@ class SshtApiClientController extends Controller
     // // send medicationDispense on cron with print logs:
     // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
     // // Lab - ServiceRequest & Speciment
-    // $this->actionSendServiceRequestAndSpecimentLabUgd($tgl_param);
+    $this->actionSendServiceRequestAndSpecimentLabUgd($tgl_param);
     // // // Lab - Observation & DiagnosticReport (on-testing)
     // // // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
-    // $this->actionSendObservationLabUgd($tgl_param);
+    $this->actionSendObservationLabUgd($tgl_param);
     // // // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
     $this->actionSendDiagnosticReportLabUgd($tgl_param);
     // // // EncounterFinish (inprogress)

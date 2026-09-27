@@ -91,6 +91,11 @@ class SshtConditionService
 
         $conditionIhsId = $resCondition['data']['idIHS'] ?? null;
 
+        $conditionSystem = $resCondition['data']['system'] ?? null;
+        $conditionCategoryCode = $resCondition['data']['category_code'] ?? null;
+        $conditionCategoryDisplay = $resCondition['data']['category_display'] ?? null;
+        $conditionCategorySystem = $resCondition['data']['category_system'] ?? null;
+
         if (!$conditionIhsId) {
           throw new Exception(
             "Condition IHS ID tidak ditemukan untuk ICD {$icd['code']}"
@@ -107,6 +112,10 @@ class SshtConditionService
             'conditionRank' => $key + 1,
             'code' => $icd['code'],
             'display' => $icd['display'],
+            'system' => $conditionSystem,
+            'category_code' => $conditionCategoryCode,
+            'category_display' => $conditionCategoryDisplay,
+            'category_system' => $conditionCategorySystem,
             'rm' => $rm,
             'dok' => $dokter,
             'created_at' => $now,
