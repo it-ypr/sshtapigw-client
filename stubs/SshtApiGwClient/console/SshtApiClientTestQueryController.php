@@ -13,6 +13,7 @@ use yii\helpers\Json;
 use Exception;
 use GuzzleHttp\Client;
 use Yii;
+use yii\db\Expression;
 
 /**
  * SshtApiClientTestController
@@ -53,7 +54,8 @@ class SshtApiClientTestQueryController extends Controller
    */
   public static function actionLabRalanTest(string $tgl_param, string $rm_param)
   {
-    $dataLabRalan = SshtApiQueryMapping::queryLabRalan($tgl_param, $rm_param);
+    // $dataLabRalan = SshtApiQueryMapping::queryLabRalan($tgl_param, $rm_param);
+    $dataLabRalan = SshtApiQueryMapping::queryLabUgd($tgl_param, $rm_param);
 
     if (empty($dataLabRalan)) {
       echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
@@ -89,6 +91,24 @@ class SshtApiClientTestQueryController extends Controller
   }
 
   /**
+   * Run: php yii ssht-test-query/lab-ugd-test 2025-05-01
+   */
+  public static function actionLabUgdTest(string $tgl_param, string $rm)
+  {
+    // $dataLabRalan = SshtApiQueryMapping::queryLabRalan($tgl_param, $rm_param);
+    $dataLabUgd = SshtApiQueryMapping::queryLabUgd($tgl_param, $rm);
+
+    if (empty($dataLabUgd)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($dataLabUgd) . " data.\n";
+    print_r($dataLabUgd);
+    // print_r($dataLabRalan[0]);
+  }
+
+  /**
    * php yii ssht-test-query/procedure-general-test 2025-09-27 055129
    */
   public function actionProcedureGeneralTest(string $tanggal, string $rm)
@@ -112,5 +132,51 @@ class SshtApiClientTestQueryController extends Controller
     } else {
       echo "\ntidak ditemukan data observasi KO.\n";
     }
+  }
+
+  /**
+   * php yii ssht-test-query/test-query-diagnostic-report-lab 2026-05-01 rm
+   */
+  public function actionTestQueryDiagnosticReportLab($tgl_param, $encounterClass)
+  {
+    $query = (new Query())
+      ->select([
+        'ssr.id',
+        'ssr.date',
+        'ssr.servicerequest_idIHS',
+        'sse.class',
+        'sse.idIHS',
+        'ssr.encounter_idIHS',
+        'ssr.category_code',
+        'ssr.category_display',
+        'ssr.code',
+        'ssr.display',
+        'ssr.perihal',
+        'ssr.rm',
+        'ssr.dok',
+        'ssr.dokter_request_idIHS',
+        'ssr.patient_idIHS',
+        'ssr.petugas_idIHS',
+        'ssr.petugas_nama',
+      ])
+      ->from(['ssr' => 'ssht_servicerequest'])
+      ->leftJoin(
+        ['sse' => 'ssht_encounter'],
+        'ssr.encounter_idIHS = sse.idIHS'
+      )
+      ->where([
+        'sse.class' => $encounterClass,
+        'ssr.category_display' => 'Laboratory procedure',
+      ])
+      ->andWhere(
+        ['=', new Expression('CAST(ssr.date AS DATE)'), $tgl_param]
+      );
+
+    echo $query->createCommand(Yii::$app->sshtAPIdb)->getRawSql();
+    echo PHP_EOL;
+
+    $rows = $query->all(Yii::$app->sshtAPIdb);
+
+    print_r($rows);
   }
 }

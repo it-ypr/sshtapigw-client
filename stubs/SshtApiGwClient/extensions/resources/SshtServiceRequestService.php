@@ -506,21 +506,44 @@ class SshtServiceRequestService
   ): void {
     $rm = $enc['subject_rm'];
 
-    $dataLabRalan = SshtApiQueryMapping::queryLabRalan(
-      $tgl_param,
-      $rm
-    );
+    $dataLab = match ($enc['class']) {
+      'AMB' => SshtApiQueryMapping::queryLabRalan(
+        $tgl_param,
+        $rm
+      ),
 
-    if (!$dataLabRalan || empty($dataLabRalan)) {
+      'EMER' => SshtApiQueryMapping::queryLabUgd(
+        $tgl_param,
+        $rm
+      ),
+
+      default => null,
+    };
+
+    if (!$dataLab || empty($dataLab)) {
       $this->stdout(
-        "[-] SKIP: RM {$rm} tydac ada order Lab\n"
+        "[-] SKIP: RM {$rm} tydac ada order Lab " .
+          "({$enc['class']})\n"
       );
+
       return;
     }
 
-    $dataPreReqLab = $dataLabRalan['prereq'];
+    // $dataLabRalan = SshtApiQueryMapping::queryLabRalan(
+    //   $tgl_param,
+    //   $rm
+    // );
 
-    foreach ($dataLabRalan['lab_result'] as $lab) {
+    // if (!$dataLabRalan || empty($dataLabRalan)) {
+    //   $this->stdout(
+    //     "[-] SKIP: RM {$rm} tydac ada order Lab\n"
+    //   );
+    //   return;
+    // }
+
+    $dataPreReqLab = $dataLab['prereq'];
+
+    foreach ($dataLab['lab_result'] as $lab) {
       $payload = [
         'sampleID' =>
         $lab['svc_req']['service_req_code'],

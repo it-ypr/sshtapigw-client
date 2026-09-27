@@ -10,6 +10,7 @@ use common\services\SshtApiGwClient\SshtApiBase;
 use common\services\SshtApiGwClient\SshtApiDebugger;
 use common\services\SshtApiGwClient\SshtApiUrl;
 use common\services\SshtApiGwClient\util\SshtApiUtil;
+use yii\db\Expression;
 
 class SshtDiagnosticReportService
 {
@@ -171,6 +172,7 @@ class SshtDiagnosticReportService
       }
 
       foreach ($serviceRequestLab as $srlab) {
+        print_r($srlab);
         $this->sendLabDiagnosticReport(
           tgl_param: $tgl_param,
           srlab: $srlab
@@ -306,22 +308,28 @@ class SshtDiagnosticReportService
   ): array {
     return (new Query())
       ->select([
+        'ssr.id',
+        'ssr.date',
         'ssr.servicerequest_idIHS',
-        'sse.idIHS as encounter_idIHS',
+
+        'sse.class',
+        'sse.idIHS',
+
+        'ssr.encounter_idIHS',
         'ssr.category_code',
         'ssr.category_display',
-        'ssr.code as sr_code',
-        'ssr.display as sr_display',
+        'ssr.code',
+        'ssr.display',
         'ssr.perihal',
         'ssr.rm',
-        'ssr.patient_idIHS',
         'ssr.dok',
         'ssr.dokter_request_idIHS',
+        'ssr.patient_idIHS',
         'ssr.petugas_idIHS',
         'ssr.petugas_nama',
-        'ssr.date',
         'ssr.status',
         'ssr.srid',
+
         'ssp.speciment_idIHS',
         'ssp.lokal_sampleID_testID',
         'ssp.method_code',
@@ -329,31 +337,34 @@ class SshtDiagnosticReportService
         'ssp.code as sp_code',
         'ssp.display as sp_display',
       ])
-      ->from('ssht_servicerequest ssr')
+      ->from(['ssr' => 'ssht_servicerequest'])
       ->leftJoin(
-        'ssht_speciment ssp',
-        'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS'
+        ['sse' => 'ssht_encounter'],
+        'ssr.encounter_idIHS = sse.idIHS'
       )
-      ->leftJoin(
-        'ssht_encounter sse',
-        'ssr.servicerequest_idIHS = sse.idIHS'
-      )
+      ->leftJoin('ssht_speciment ssp', 'ssr.servicerequest_idIHS = ssp.servicerequest_idIHS')
       ->where([
-        'CAST(ssr.date AS DATE)' => $tgl_param,
-        'ssr.status' => 'active',
+        'sse.class' => $encounterClass,
         'ssr.category_code' => '108252007',
         'ssr.category_display' => 'Laboratory procedure',
-        'sse.class' => $encounterClass,
+      ])
+      ->andWhere([
+        '=',
+        new Expression('CAST(ssr.date AS DATE)'),
+        $tgl_param
       ])
       ->all($this->dbLocal);
   }
+
 
   private function sendLabDiagnosticReport(
     string $tgl_param,
     array $srlab
   ): void {
     $servicerequestId = $srlab['servicerequest_idIHS'];
+    $encounter_idIHS = $srlab['encounter_idIHS'];
     $specimentId = $srlab['speciment_idIHS'];
+    $patient_idIHS = $srlab['patient_idIHS'];
     $rm = $srlab['rm'];
 
     $checkDr = (new Query())
@@ -361,6 +372,7 @@ class SshtDiagnosticReportService
       ->where([
         'rm' => $rm,
         'servicerequest_idIHS' => $servicerequestId,
+        'encounter_idIHS' => $encounter_idIHS,
         'category_code' => 'LAB',
       ])
       ->andWhere(['like', 'date', $tgl_param])
@@ -382,10 +394,27 @@ class SshtDiagnosticReportService
       return;
     }
 
+    // print_r('--- Masuk SshtDiagnosticReportService::sendLabDiagnosticReport() ----\n');
+    // print_r('---\n');
+    // print_r($srlab);
+    // print_r('---\n');
+    //
+    // $payload = [
+    //   'servicerequest_idIHS' => $servicerequestId,
+    //   'value' => '-',
+    //   'speciment_idIHS' => $specimentId,
+    //   'srid' => $srlab['srid'],
+    // ];
+    //
+    // print_r('--- Payload: ---\n');
+    // print_r($payload);
+    // print_r('---\n');
+
     $payload = [
       'servicerequest_idIHS' => $servicerequestId,
       'value' => '-',
       'speciment_idIHS' => $specimentId,
+      'patient_idIHS' => $patient_idIHS,
       'srid' => $srlab['srid'],
     ];
 

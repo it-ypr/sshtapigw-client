@@ -341,10 +341,9 @@ class SshtObservationService
         // Sesuai logic existing, UGD tetap menggunakan
         // queryObservationLabLocalRalan().
         $obsLabs =
-          SshtApiQueryMapping::getObservationLabLocalRalan(
-            $tgl_param,
-            $srrm,
-            $srlab['sr_code']
+          SshtApiQueryMapping::getObservationLabLocalUgd(
+            $srlab['sr_code'],
+            $srlab['lokal_sampleID_testID']
           );
 
         if (!$obsLabs) {
@@ -481,7 +480,7 @@ class SshtObservationService
       )
       ->leftJoin(
         'ssht_encounter sse',
-        'ssr.servicerequest_idIHS = sse.idIHS'
+        'ssr.encounter_idIHS = sse.idIHS'
       )
       ->where([
         'CAST(ssr.date AS DATE)' => $tgl_param,
