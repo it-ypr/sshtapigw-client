@@ -102,20 +102,32 @@ class SshtServiceRequestService
           )
         );
 
+        // WHERE patient_idIHS = :subject_idIHS
+        //   AND encounter_idIHS = :encounter_idIHS
+        //   AND petugas_ihs = :petugas_idIHS
+        //   AND dokter_request_idIHS = :dokter_request_idIHS
+        //   AND code = :loinc_code
+        //   AND category_display = 'Imaging'
+        //   AND acsn = :acsn
+        //   AND date >= :hour_start
+        //   AND date < :hour_end
+        //   AND class = 'AMB'
+        // LIMIT 1
         $duplicateServiceRequestRadioRalan =
           $this->dbLocal->createCommand("
             SELECT servicerequest_idIHS
             FROM ssht_servicerequest
+            LEFT JOIN ssht_encounter on ssht_servicerequest.encounter_idIHS = ssht_encounter.idIHS 
             WHERE patient_idIHS = :subject_idIHS
-              AND encounter_idIHS = :encounter_idIHS
-              AND petugas_ihs = :petugas_idIHS
-              AND dokter_request_idIHS = :dokter_request_idIHS
-              AND code = :loinc_code
-              AND category_display = 'Imaging'
-              AND acsn = :acsn
-              AND date >= :hour_start
-              AND date < :hour_end
-              AND class = 'AMB'
+              AND ssht_servicerequest.encounter_idIHS = :encounter_idIHS
+              AND ssht_servicerequest.petugas_idIHS = :petugas_idIHS
+              AND ssht_servicerequest.dokter_request_idIHS = :dokter_request_idIHS
+              AND ssht_servicerequest.code = :loinc_code
+              AND ssht_servicerequest.category_display = 'Imaging'
+              AND ssht_servicerequest.acsn = :acsn
+              AND ssht_servicerequest.date >= :hour_start
+              AND ssht_servicerequest.date < :hour_end
+              AND ssht_encounter.class = 'AMB'
             LIMIT 1
           ")
           ->bindValues([
