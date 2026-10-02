@@ -34,6 +34,23 @@ class SshtApiClientTestQueryController extends Controller
   }
 
   /**
+   * Run: php yii ssht-test-query/procedure-general-ranap 2025-05-01 rm
+   */
+  public static function actionProcedureGeneralRanap($tgl_param, $rm)
+  {
+    $dataProcedure = SshtApiQueryMapping::queryProcedureGeneralRanap($tgl_param, $rm);
+
+    if (empty($dataProcedure)) {
+      echo "Data Procedure tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan Data Procedure: " . count($dataProcedure) . " data.\n";
+    echo "Example array-0: \n";
+    print_r($dataProcedure[0]);
+  }
+
+  /**
    * Run: php yii ssht-test-query/encounter-ralan-test 2025-05-01 rm
    */
   public static function actionEncounterRalanTest($tgl_param)

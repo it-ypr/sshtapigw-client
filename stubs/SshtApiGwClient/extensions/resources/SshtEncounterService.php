@@ -510,7 +510,15 @@ class SshtEncounterService
 
   public function sendRanap(string $tgl_param): void
   {
-    // blomm...
+    echo "--- TASK SSHT START Encounter & Diagnosa (RANAP): [{$tgl_param}] ---\n";
+
+    $dataEncounter = SshtApiQueryMapping::queryEncounterRanapSimrs($tgl_param);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal {$tgl_param}\n";
+    }
+
+    echo "Ditemukan " . count($dataEncounter) . " data.\n";
   }
 
   public function sendFinishRalan(string $tgl_param): void
