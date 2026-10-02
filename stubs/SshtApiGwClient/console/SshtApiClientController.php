@@ -118,7 +118,7 @@ class SshtApiClientController extends Controller
     // // observation & diagnosticReport Radiologi
     $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
     // // medicationRequest & medicationDispense (inprogress)
-    // $this->actionGenerateMedicationRequestUgd($tgl_param);
+    $this->actionGenerateMedicationRequestUgd($tgl_param);
     // // send medicationRequest manual (CLI/command prompt):
     // // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
     // // send medicationRequest via cron:

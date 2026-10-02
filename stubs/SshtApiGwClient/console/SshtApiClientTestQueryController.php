@@ -49,6 +49,24 @@ class SshtApiClientTestQueryController extends Controller
     print_r($dataEncounter[0]);
   }
 
+
+  /**
+   * Run: php yii ssht-test-query/encounter-ugd-test 2025-05-01
+   */
+  public static function actionEncounterUgdTest($tgl_param)
+  {
+    $dataEncounter = SshtApiQueryMapping::queryEncounterUgdSimrs($tgl_param);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($dataEncounter) . " data.\n";
+    print_r($dataEncounter[0]);
+    print_r($dataEncounter[1]);
+  }
+
   /**
    * Run: php yii ssht-test-query/lab-ralan-test 2025-05-01 rm
    */

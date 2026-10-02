@@ -2,6 +2,7 @@
 
 namespace common\services\SshtApiGwClient\console;
 
+use common\services\SshtApiGwClient\extensions\resources\SshtConditionService;
 use common\services\SshtApiGwClient\mapping\SshtApiQueryMapping;
 use common\services\SshtApiGwClient\SshtApiBase;
 use common\services\SshtApiGwClient\SshtApiDebugger;
@@ -21,6 +22,44 @@ use Yii;
  */
 class SshtApiClientTestingController extends Controller
 {
+  /**
+   * php yii ssht-api-client-testing/test-send-diagnosa $encounterClass $encounterIHS $rm $icdCodes 
+   */
+  public function actionTestSendDiagnosa(
+    string $encounter_class,
+    string $encounterIHS,
+    string $rm_param,
+    string $icd_codes
+  ): void {
+    $dbLocal = Yii::$app->sshtAPIdb;
+
+    $config = SshtApiBase::getConfig();
+
+    $debugger = new SshtApiDebugger(
+      enabled: $config['debug']
+    );
+
+    $data = (new Query())
+      ->from('ssht_encounter as sse')
+      ->where([
+        'sse.idIHS' => $encounterIHS,
+        'sse.class' => $encounter_class,
+        'sse.subject_rm' => $rm_param,
+      ])
+      ->one($dbLocal);
+
+    (new SshtConditionService())->sendForEncounter(
+      encounterId: $data['idIHS'],
+      patientId: $data['subject_idIHS'],
+      patientName: $data['subject_nama'],
+      icdCodes: $icd_codes,
+      inprogressStart: $data['inprogress_start'],
+      inprogressEnd: $data['inprogress_end'],
+      rm: $data['subject_rm'],
+      dokter: $data['practition_lokalid']
+    );
+  }
+
   /**
    * php yii ssht-api-client-testing/test-wrapper-send-medication-ralan-single 2026-05-01 $rm
    */
