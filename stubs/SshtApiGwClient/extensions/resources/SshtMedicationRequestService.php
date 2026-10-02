@@ -293,6 +293,8 @@ class SshtMedicationRequestService
 
   public function generateRalan(string $tgl_param): void
   {
+    $class = 'AMB';
+
     echo "--- TASK SSHT Generate MedicationRequest (Ralan): [{$tgl_param}] ---\n";
 
     $encounter = (new Query())
@@ -313,7 +315,7 @@ class SshtMedicationRequestService
         'CAST(inprogress_start AS DATE)' => $tgl_param
       ])
       ->andWhere([
-        'class' => 'AMB'
+        'class' => $class
       ])
       ->all($this->dbLocal);
 
@@ -520,6 +522,8 @@ class SshtMedicationRequestService
 
   public function generateUgd(string $tgl_param): void
   {
+    $class = 'EMER';
+
     print_r("--- TASK SSHT Generate MedicationRequest (UGD): [{$tgl_param}] ---\n");
 
     $encounter = (new Query())
@@ -537,7 +541,7 @@ class SshtMedicationRequestService
       ])
       ->from('ssht_encounter')
       ->where(['CAST(inprogress_start AS DATE)' => $tgl_param])
-      ->andWhere(['class' => 'EMER'])
+      ->andWhere(['class' => $class])
       ->all($this->dbLocal);
 
     if (empty($encounter)) {

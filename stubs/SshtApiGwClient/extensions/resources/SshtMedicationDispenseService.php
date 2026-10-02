@@ -503,78 +503,54 @@ class SshtMedicationDispenseService
           ->update(
             'ssht_medication_dispense',
             [
-              'medicationdispense_idIHS' =>
-              $medicationDispense_idIHS,
+              'medicationdispense_idIHS' => $medicationDispense_idIHS,
 
-              'medicationrequest_idIHS' =>
-              $MedReqData['medicationRequest_idIHS'],
+              'medicationrequest_idIHS' => $MedReqData['medicationRequest_idIHS'],
 
-              'encounter_idIHS' =>
-              $MedReqData['encounter_idIHS'],
+              'encounter_idIHS' =>  $MedReqData['encounter_idIHS'],
 
-              'contained' =>
-              json_encode($MedReqData['contained']),
+              'contained' => json_encode($MedReqData['contained']),
 
-              'category_code' =>
-              $MedReqData['category_code'],
+              'category_code' =>  $MedReqData['category_code'],
 
-              'category_display' =>
-              $MedReqData['category_display'],
+              'category_display' => $MedReqData['category_display'],
 
-              'category_system' =>
-              $MedReqData['category_system'],
+              'category_system' =>  $MedReqData['category_system'],
 
-              'performer_idIHS' =>
-              $MedReqData['performer_idIHS'],
+              'performer_idIHS' => $MedReqData['performer_idIHS'],
 
-              'quantity_system' =>
-              $MedReqData['quantity_system'],
+              'quantity_system' =>  $MedReqData['quantity_system'],
 
-              'quantity_code' =>
-              $MedReqData['quantity_code'],
+              'quantity_code' => $MedReqData['quantity_code'],
 
-              'quantity_unit' =>
-              $MedReqData['quantity_unit'],
+              'quantity_unit' =>  $MedReqData['quantity_unit'],
 
-              'quantity_value' =>
-              $MedReqData['quantity_value'],
+              'quantity_value' => $MedReqData['quantity_value'],
 
-              'when_prepared' =>
-              $MedReqData['when_prepared'],
+              'when_prepared' => $MedReqData['when_prepared'],
 
-              'when_handed_over' =>
-              $MedReqData['when_handed_over'],
+              'when_handed_over' => $MedReqData['when_handed_over'],
 
-              'dosage_instruction' =>
-              json_encode($MedReqData['dosage_instruction']),
+              'dosage_instruction' => json_encode($MedReqData['dosage_instruction']),
 
-              'status' =>
-              $MedReqData['status'],
+              'status' => $MedReqData['status'],
 
-              'local_id' =>
-              $MedReqData['local_id'],
+              'local_id' => $MedReqData['local_id'],
 
-              'updated_at' =>
-              date('Y-m-d H:i:s'),
+              'updated_at' => date('Y-m-d H:i:s'),
 
-              'send_at' =>
-              date('Y-m-d H:i:s'),
+              'send_at' => date('Y-m-d H:i:s'),
 
-              'send_status' =>
-              'S',
+              'send_status' => 'S',
 
-              'payload' =>
-              json_encode($payload),
+              'payload' => json_encode($payload),
 
-              'send_error_message' =>
-              '',
+              'send_error_message' => '',
 
-              'send_error_code' =>
-              '',
+              'send_error_code' => '',
             ],
             [
-              'identifier_noresep_index' =>
-              $payload['identifier_noresep_index'],
+              'identifier_noresep_index' => $payload['identifier_noresep_index'],
             ]
           )
           ->execute();
