@@ -275,6 +275,9 @@ class SshtEncounterService
 
             'class' =>
             $encData['class'],
+
+            'status' =>
+            $encData['status'],
           ])
           ->execute();
 
@@ -478,6 +481,7 @@ class SshtEncounterService
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
             'class' => $encData['class'],
+            'status' => $encData['status'],
           ])
           ->execute();
 
@@ -533,6 +537,7 @@ class SshtEncounterService
         'finish_start',
         'finish_end',
         'class',
+        'status'
       ])
       ->from('ssht_encounter')
       ->where([
