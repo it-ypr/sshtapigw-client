@@ -48,16 +48,30 @@ class SshtApiClientTestingController extends Controller
       ])
       ->one($dbLocal);
 
-    (new SshtConditionService())->sendForEncounter(
-      encounterId: $data['idIHS'],
-      patientId: $data['subject_idIHS'],
-      patientName: $data['subject_nama'],
-      icdCodes: $icd_codes,
-      inprogressStart: $data['inprogress_start'],
-      inprogressEnd: $data['inprogress_end'],
-      rm: $data['subject_rm'],
-      dokter: $data['practition_lokalid']
-    );
+    if ($encounter_class == 'IMP') {
+
+      (new SshtConditionService())->sendForEncounter(
+        encounterId: $data['idIHS'],
+        patientId: $data['subject_idIHS'],
+        patientName: $data['subject_nama'],
+        icdCodes: $icd_codes,
+        inprogressStart: $data['inprogress_start'],
+        inprogressEnd: $data['inprogress_start'],
+        rm: $data['subject_rm'],
+        dokter: $data['practition_lokalid']
+      );
+    } else {
+      (new SshtConditionService())->sendForEncounter(
+        encounterId: $data['idIHS'],
+        patientId: $data['subject_idIHS'],
+        patientName: $data['subject_nama'],
+        icdCodes: $icd_codes,
+        inprogressStart: $data['inprogress_start'],
+        inprogressEnd: $data['inprogress_end'],
+        rm: $data['subject_rm'],
+        dokter: $data['practition_lokalid']
+      );
+    }
   }
 
   /**

@@ -622,7 +622,7 @@ class SshtEncounterService
                       AND location_idIHS = :location_idIHS
                       AND inprogress_start >= :hour_start
                       AND inprogress_start < :hour_end
-                      AND class = 'INP'
+                      AND class = 'IMP'
                     LIMIT 1
                 ")
           ->bindValues([
@@ -691,6 +691,8 @@ class SshtEncounterService
             'location_idIHS' => $encData['location_idIHS'],
             'location_nama' => $encData['location_nama'],
             'organization_idIHS' => $encData['organization_idIHS'],
+            'arrived_start' => $encData['inprogress_start'],
+            'arrived_end' => $encData['inprogress_start'],
             'inprogress_start' => $encData['inprogress_start'],
             'inprogress_end' => $tglpulang,
             'created_at' => date('Y-m-d H:i:s'),

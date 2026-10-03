@@ -290,7 +290,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->andWhere(['<>', 'mr_ranap_pulang.jamkeluar', ''])
       ->andWhere(["mr_ranap.ondelete" => 0])
       ->andWhere("STR_TO_DATE(mr_ranap_pulang.jamkeluar, '%H:%i') IS NOT NULL")
-      ->andWhere(['like', "mr_ranap.ruper", 'CB' . '%', false])
+      ->andWhere(['like', "mr_ranap.ruper", 'CB' . '%', false]) // saat ini baru pake cb sek ges
       ->groupBy(['mr_ranap.noregis'])
       ->all($dbSimrs);
   }
