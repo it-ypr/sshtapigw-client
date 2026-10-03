@@ -177,4 +177,14 @@ class SshtApiUtil
   //   // 4.1. true -> parse jadi float
   //   // 5. return float
   // }
+
+  /* 
+   * Parse Bed location untuk query 
+   *
+   * exp: '%{nama_ruang}-room-b{nama_bed}-bed'
+   */
+  public static function parseLocationBed($ruper, $ruang)
+  {
+    return (string) strtolower(str_replace(' ', '', trim($ruper))) . '-room-b' . trim($ruang) . '-bed';
+  }
 }

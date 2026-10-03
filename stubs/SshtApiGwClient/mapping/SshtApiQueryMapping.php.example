@@ -248,31 +248,51 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return (new Query())
       ->select([
-        'mr_ranap.*',
-        'TRIM(mr_ktp.ktp) as ktp',
-        'TRIM(mmr.nama) as pasien_nama',
-        'TRIM(muser.nm_user) as dokter_nama',
-        'muser.' . SshtApiQueryMapping::MUSER_IHS . ' as dokter_ihs',
-        // 'mpoli.idihs as lokasi_ihs',
-        'mpoli.' . SshtApiQueryMapping::MPOLI_IHS . ' as lokasi_ihs',
-        'tblnew.poli as poli',
-        "GROUP_CONCAT(DISTINCT RTRIM(mr_kunjungan_ranap.icd) SEPARATOR ';') as icd_codes",
-        // 'MIN(tblnew.tglperiksa) as a_end',
-        // 'MAX(tblnew.resep) as p_rawend'
+        'mr_ranap.Id',
+        'mr_ranap.rm',
+        'mr_ranap.tglkeluar',
+        'mr_ranap.ruper',
+        'mr_ranap.kelas',
+        'mr_ranap.ruang',
+        'mr_ranap.procmasuk',
+        'mr_ranap.ondelete',
+        // 'mr_ranap.*',
+
+        'TRIM(mr_ktp.ktp) AS ktp',
+        'TRIM(mmr.nama) AS pasien_nama',
+        'TRIM(muser.nm_user) AS dokter_nama',
+        'TRIM(muser.idssht) AS dokter_ihs',
+
+        "GROUP_CONCAT(
+              DISTINCT RTRIM(mr_kunjungan_ranap.icd)
+              SEPARATOR ';'
+          ) AS icd_codes",
+
+        'mr_ranap.tglmasuk AS tgl_jam_masuk',
+
+        "CONCAT(
+              mr_ranap_pulang.tglkeluar,
+              ' ',
+              mr_ranap_pulang.jamkeluar,
+              ':00'
+          ) AS tgl_jam_keluar",
       ])
-      ->from('mr_ranap')
+      ->from('mr_ranap_pulang')
+      ->leftJoin('mr_ranap', 'mr_ranap_pulang.noregis = mr_ranap.noregis')
       ->innerJoin('mr_kunjungan_ranap', 'mr_ranap.noregis = mr_kunjungan_ranap.noregis')
-      // ->innerJoin('mpoli', 'tblnew.poli = mpoli.poli')
-      ->innerJoin('mmr', 'tblnew.rm = mmr.rm')
-      ->innerJoin('mr_ktp', 'tblnew.rm = mr_ktp.rm')
-      ->innerJoin('muser', 'tblnew.dokter = muser.id_user')
-      ->where("mr_ranap.tglmasuk LIKE '$tgl_param%'")
-      // ->where(['like', 'tblnew.tglperiksa', $tgl_param . '%', false])
-      ->andWhere(['like', 'mr_kunjungan_ranap.tglmasuk', $tgl_param . '%', false])
-      ->andWhere(['not', 'mr_ranap.tglkeluar', '0000-00-00 00:00:00'])
-      ->andWhere(['not', ['muser.' . SshtApiQueryMapping::MUSER_IHS => null]])
+      ->innerJoin('mmr', 'mr_ranap_pulang.rm = mmr.rm')
+      ->innerJoin('mr_ktp', 'mmr.rm = mr_ktp.rm')
+      ->innerJoin('muser', 'mr_ranap_pulang.dokter = muser.id_user')
+      ->where(['like', 'mr_ranap.tglmasuk', $tgl_param . '%', false])
+      ->andWhere(['<>', 'mr_ranap.tglkeluar', '0000-00-00'])
+      ->andWhere(['not', ['muser.idssht' => null]])
+      ->andWhere(['not', ['mr_ranap_pulang.jamkeluar' => null]])
+      ->andWhere(['<>', 'mr_ranap_pulang.jamkeluar', ''])
+      ->andWhere(["mr_ranap.ondelete" => 0])
+      ->andWhere("STR_TO_DATE(mr_ranap_pulang.jamkeluar, '%H:%i') IS NOT NULL")
+      ->andWhere(['like', "mr_ranap.ruper", 'CB' . '%', false])
       ->groupBy(['mr_ranap.noregis'])
-      ->all($dbSimrs); // Asumsi db2 adalah koneksi SIMRS
+      ->all($dbSimrs);
   }
 
   // query-servicerequest
@@ -583,69 +603,6 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         't2.rm' => $rm,
         't2.poli' => '29', // filter poli IGD
       ])
-      ->all($db1);
-
-    if (!$result) {
-      return false;
-    }
-
-    $first = $result[0];
-    $procedures = [];
-    $seen = [];
-
-    foreach ($result as $row) {
-      $icd9 = trim((string) $row['kode_icd']);
-      $desc = trim((string) $row['procedure']);
-      $key = $icd9 . "\0" . $desc;
-
-      if (isset($seen[$key])) {
-        continue;
-      }
-
-      $seen[$key] = true;
-      $procedures[] = [
-        'icd9' => $icd9,
-        'desc' => $desc,
-      ];
-    }
-
-    $data['tanggal'] = $first['tanggal'];
-    $data['rm_pasien'] = $first['rm'];
-    $data['nama_pasien'] = $first['nama'];
-    $data['kode_dokter'] = $first['dokter'];
-    $data['nama_dokter'] = $first['rl_user'];
-    $data['procedures'] = $procedures;
-    $data['kode_poli'] = $first['poli'];
-
-    return $data;
-  }
-
-
-  public static function queryProcedureGeneralRanap(string $tanggal, string $rm)
-  {
-    $db1 = Yii::$app->db;
-    $result = (new Query())
-      ->select([
-        't2.tanggal',
-        't2.rm',
-        't3.nama',
-        't1.id_casemix',
-        't2.Id',
-        't1.kode_icd',
-        't1.procedure',
-        't2.dokter',
-        't4.rl_user',
-        't2.poli',
-      ])
-      ->from(['t1' => 'mr_casemix_ranap_pc'])
-      ->leftJoin(['t2' => 'mr_casemix_ranap'], 't1.id_casemix = t2.Id')
-      ->leftJoin(['t3' => 'mmr'], 't2.rm = t3.rm')
-      ->leftJoin(['t4' => 'muser'], 't2.dokter = t4.id_user')
-      ->where([
-        't2.tanggalmasuk' => $tanggal,
-        't2.rm' => $rm,
-      ])
-      ->andWhere(['not', ['t2.tanggalkeluar' => '']])
       ->all($db1);
 
     if (!$result) {
@@ -1531,3 +1488,4 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $data;
   }
 }
+

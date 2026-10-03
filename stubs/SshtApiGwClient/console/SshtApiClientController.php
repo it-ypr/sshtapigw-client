@@ -85,7 +85,7 @@ class SshtApiClientController extends Controller
     // // observasi vital
     // $this->actionSendObservationRanap($tgl_param);
     // // general procedure
-    $this->actionSendProcedureGeneralRanap($tgl_param);
+    // $this->actionSendProcedureGeneralRanap($tgl_param);
     // // serviceRequest Radiologi
     // $this->actionSendServiceRequestRadio($tgl_param);
     // // imagingStudy
@@ -160,11 +160,12 @@ class SshtApiClientController extends Controller
 
   /**
    * Run Cron: php yii ssht-api-client/send-encounter-ranap 2026-05-01
+   *
+   * param: tgl_param = tgl_masuk pasien
    */
   public function actionSendEncounterRanap($tgl_param)
   {
-    echo "--- TASK SSHT START: " . date('Y-m-d H:i:s') . " ---\n";
-    echo "\n--- TASK DONE ---\n";
+    (new SshtEncounterService())->sendRanap($tgl_param);
   }
 
 
@@ -362,14 +363,6 @@ class SshtApiClientController extends Controller
   public function actionSendProcedureGeneralUgd($tgl_param)
   {
     (new SshtProcedureService())->sendGeneralUgd($tgl_param);
-  }
-
-  /**
-   * php yii ssht-api-client/send-procedure-general-ranap 2026-05-01
-   */
-  public function actionSendProcedureGeneralRanap($tgl_param)
-  {
-    (new SshtProcedureService())->sendGeneralRanap($tgl_param);
   }
 
   /**

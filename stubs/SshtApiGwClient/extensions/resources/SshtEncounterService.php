@@ -519,6 +519,208 @@ class SshtEncounterService
     }
 
     echo "Ditemukan " . count($dataEncounter) . " data.\n";
+
+    foreach ($dataEncounter as $row) {
+      try {
+        echo "\nProcessing RM: {$row['rm']}...";
+
+        // Patient
+        $ktp = preg_replace('/\D/', '', $row['ktp']);
+
+        $resPatient = SshtApiBase::request(
+          SshtApiUrl::PATIENTS_GET_BY_NIK,
+          ['query' => ['id' => $ktp]]
+        );
+
+        $resPatientReq = json_decode(
+          (string) $resPatient->getBody(),
+          true
+        );
+
+        sleep(1);
+
+        $pasienIhs = $resPatientReq['data']['idIHS'] ?? null;
+
+        if (!$pasienIhs) {
+          echo " SKIPPED (IHS Pasien tidak ditemukan)";
+          continue;
+        }
+
+        // exp: %{nama_ruang}-room-b{nama_bed}-bed
+        $initLocation = SshtApiUtil::parseLocationBed($row['ruper'], $row['ruang']);
+
+        echo " Ditemukan : {$initLocation}";
+
+        $initLocationIHS = (new Query())
+          ->select([
+            'ssht_location.idIHS',
+            'ssht_location.nama',
+          ])
+          ->from('ssht_location')
+          ->where(['like', 'ssht_location.schema', '%' . $initLocation, false])
+          ->one($this->dbLocal);
+
+        print_r($initLocation);
+
+        if (!$initLocationIHS) {
+          throw new Exception('tidak ada data locationIHS untuk bed');
+        }
+
+        // Location
+        $resLocation = SshtApiBase::request(
+          SshtApiUrl::LOCATION_GET_BY_IHS,
+          ['query' => ['id' => $initLocationIHS['idIHS']]]
+        );
+
+        $locationNamaReq = json_decode(
+          (string) $resLocation->getBody(),
+          true
+        );
+
+        $locationNama = $locationNamaReq['data']['nama'] ?? 'Bed Ranap';
+        $locationIHS = $locationNamaReq['data']['idIHS'] ?? '';
+
+        // Generate UGD times
+        // $times = $this->generateEncounterTimesUgd($row['a_end']);
+
+        // Encounter payload
+        $payloadEncounter = [
+          'pasien_idIHS' => $pasienIhs,
+          'pasien_nama' => $row['pasien_nama'],
+          'pasien_rm' => $row['rm'],
+          'practitioner_idIHS' => $row['dokter_ihs'],
+          'practitioner_nama' => $row['dokter_nama'],
+          'location_idIHS' => $locationIHS,
+          'location_nama' => $locationNama,
+          // 'location_poli' => $row['poli'],
+          'arrived_at' => $row['tgl_jam_masuk'],
+          // 'inprogress_at' => isset($row['tgl_jam_keluar']) ? $row['tgl_jam_keluar'] : $row['tglkeluar'],
+          'inprogress_at' => $row['tgl_jam_masuk'],
+          'class' => 'ranap',
+          'kelas' => $row['kelas'],
+        ];
+
+        $tglpulang = isset($row['tgl_jam_keluar']) ? $row['tgl_jam_keluar'] : $row['tglkeluar'];
+
+        // Duplicate: 1 patient + 1 doctor + 1 location + 1 hour
+        $hourStart = date(
+          'Y-m-d H:00:00',
+          strtotime($payloadEncounter['inprogress_at'])
+        );
+
+        $hourEnd = date(
+          'Y-m-d H:00:00',
+          strtotime($payloadEncounter['inprogress_at'] . ' +1 hour')
+        );
+
+        $duplicateEncounter = $this->dbLocal
+          ->createCommand("
+                    SELECT idIHS
+                    FROM ssht_encounter
+                    WHERE subject_idIHS = :subject_idIHS
+                      AND practition_idIHS = :practitioner_idIHS
+                      AND location_idIHS = :location_idIHS
+                      AND inprogress_start >= :hour_start
+                      AND inprogress_start < :hour_end
+                      AND class = 'INP'
+                    LIMIT 1
+                ")
+          ->bindValues([
+            ':subject_idIHS' => $pasienIhs,
+            ':practitioner_idIHS' => $row['dokter_ihs'],
+            ':location_idIHS' => $payloadEncounter['location_idIHS'],
+            ':hour_start' => $hourStart,
+            ':hour_end' => $hourEnd,
+          ])
+          ->queryScalar();
+
+        if ($duplicateEncounter) {
+          echo " SKIPPED (DUPLICATE ENCOUNTER RANAP)";
+          echo " [IHS: {$duplicateEncounter}]";
+          echo " [{$hourStart}]\n";
+
+          continue;
+        }
+
+        // Debug
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_CREATE
+          ),
+          payload: $payloadEncounter,
+        )) {
+          continue;
+        }
+
+        // Create Encounter
+        $resEncReq = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_CREATE,
+          ['json' => $payloadEncounter]
+        );
+
+        $resEnc = json_decode(
+          (string) $resEncReq->getBody(),
+          true
+        );
+
+        $encounterIhsId = $resEnc['data']['idIHS'] ?? null;
+
+        sleep(1);
+
+        if (!$encounterIhsId) {
+          echo " FAILED ENCOUNTER";
+          sleep(2);
+          continue;
+        }
+
+        echo " SUCCESS ENCOUNTER: {$encounterIhsId}\n";
+
+        $encData = $resEnc['data'];
+
+        // Save local Encounter
+        $this->dbLocal
+          ->createCommand()
+          ->insert('ssht_encounter', [
+            'idIHS' => $encData['idIHS'],
+            'subject_rm' => $encData['subject_rm'],
+            'subject_idIHS' => $encData['subject_idIHS'],
+            'subject_nama' => $encData['subject_nama'],
+            'practition_idIHS' => $encData['practition_idIHS'],
+            'practition_lokalid' => $row['dokter'],
+            'practition_nama' => $encData['practition_nama'],
+            'location_idIHS' => $encData['location_idIHS'],
+            'location_nama' => $encData['location_nama'],
+            'organization_idIHS' => $encData['organization_idIHS'],
+            'inprogress_start' => $encData['inprogress_start'],
+            'inprogress_end' => $tglpulang,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+            'class' => $encData['class'],
+            'status' => $encData['status'],
+          ])
+          ->execute();
+
+        // Send Condition melalui ConditionService
+        $this->conditionService->sendForEncounter(
+          encounterId: $encounterIhsId,
+          patientId: $pasienIhs,
+          patientName: $row['pasien_nama'],
+          icdCodes: $row['icd_codes'],
+          inprogressStart: $encData['inprogress_start'],
+          inprogressEnd: $encData['inprogress_start'],
+          rm: $row['rm'],
+          dokter: $row['dokter'],
+        );
+      } catch (Exception $e) {
+        echo " ERROR: " . $e->getMessage() . "\n";
+        sleep(5);
+      }
+
+      // rate limit gateway
+      sleep(2);
+    }
+
+    echo "\n--- TASK DONE: {$tgl_param} ---\n";
   }
 
   public function sendFinishRalan(string $tgl_param): void
