@@ -140,12 +140,10 @@ class SshtObservationService
       foreach ($encounters as $enc) {
         $rm = $enc['subject_rm'];
 
-        $simrsobs =
-          SshtApiQueryMapping::queryObservationRanap(
-            noregis: $enc['noregis'],
-            tanggal: $tgl_param,
-            rm: $rm
-          );
+        $simrsobs = SshtApiQueryMapping::queryObservationRanap(
+          noregis: $enc['noregis'],
+          rm: $rm
+        );
 
         if (!$simrsobs) {
           $this->stdout(

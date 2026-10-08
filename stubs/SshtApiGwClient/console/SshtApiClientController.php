@@ -85,7 +85,7 @@ class SshtApiClientController extends Controller
     // // encounter finish
     $this->actionSendEncounterFinishRanap($tgl_param);
     // // observasi vital
-    // $this->actionSendObservationRanap($tgl_param);
+    $this->actionSendObservationRanap($tgl_param);
     // // general procedure
     // $this->actionSendProcedureGeneralRanap($tgl_param);
     // // serviceRequest Radiologi

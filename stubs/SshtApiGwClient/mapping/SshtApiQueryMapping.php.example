@@ -4,6 +4,7 @@ namespace common\services\SshtApiGwClient\mapping;
 
 use Yii;
 use yii\db\Query;
+use yii\db\Expression;
 use common\services\SshtApiGwClient\mapping\SshtApiQueryRepository;
 use common\services\SshtApiGwClient\util\SshtApiUtil;
 
@@ -521,104 +522,181 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $data;
   }
 
-
   /**
    * Query lokal observation vital ranap
-   * @param string $tanggal
+   * @param string $noregis
+   * @param string $rm
+   * @return array|false
    */
-  public static function queryObservationRanap(string $noregis, string $tanggal, string $rm)
-  {
+  public static function queryObservationRanap(
+    string $noregis,
+    string $rm
+  ): array|false {
+
     $db1 = Yii::$app->db;
 
-    // SELECT
-    //     rv.*,
-    //     rms_kode.kode AS nama_kode,
-    //     rms_kode.Nama AS nama_display
-    // FROM ruper_vital rv
-    // LEFT JOIN ruper_m_setup rms_kode
-    //     ON rv.kode = rms_kode.kode
-    // WHERE rv.noregis = '2602793'
-    //   AND rv.rm = '205152'
-    //   AND rv.Kondisi = 1AND rv.kode in ('10006','10007')
-
-    // ruper_vital
-    $subQuery = (new Query())
-      ->select(['MIN(Id)'])
-      ->from('ruper_vital rv2')
-      ->where([
-        'rv2.tanggal' => $tanggal,
-        'rv2.rm' => $rm,
-        'rv2.noregis' => $noregis,
-        'rv2.Kondisi' => 1,
-      ])
-      ->andWhere('rv2.kode = rv.kode');
-
-    $result = (new Query())
+    /*
+     * Query 1: Vital sign
+     *
+     * 10006 = systolic
+     * 10007 = diastolic
+     * 10009 = heart_rate
+     * 10010 = body_temp
+     * 10011 = respiratory_rate
+     */
+    $vitalQuery = (new Query())
       ->select([
         'rv.Id',
-        'rv.kode',
-        'rv.rm',
-        'mr.nama',
         'rv.tanggal',
-        'rv.dokter',
-        'ms.rl_user',
+        'rv.rm',
+        'rv.noregis',
+        'rv.kode',
         'rms.kode AS nama_kode',
         'rms.Nama AS nama_display',
+        new Expression("
+                CASE rv.kode
+                    WHEN '10006' THEN 'systolic'
+                    WHEN '10007' THEN 'diastolic'
+                    WHEN '10009' THEN 'heart_rate'
+                    WHEN '10010' THEN 'body_temp'
+                    WHEN '10011' THEN 'respiratory_rate'
+                END
+            AS observation_code"),
+        'rv.nilai',
       ])
       ->from(['rv' => 'ruper_vital'])
-      ->leftJoin(['rms' => 'ruper_m_setup'], 'rv.kode = rms.kode')
-      ->leftJoin(['mr' => 'mmr'], 'rv.rm = mmr.rm')
-      ->leftJoin(['msr' => 'muser'], 'rv.dokter = msr.id_user')
+      ->leftJoin(
+        ['rms' => 'ruper_m_setup'],
+        'rv.kode = rms.kode'
+      )
       ->where([
-        'rv.tanggal' => $tanggal,
+        'rv.noregis' => $noregis,
         'rv.rm' => $rm,
-        'rv.noregist' => $noregis,
-        'rv.Kondisi' => 1,
+        'rv.kondisi' => 1,
       ])
-      // suhu: ruper_vital in (10010)
-      // nadi: ruper_vital in (10009)
-      // td sys: ruper_vital in (10006)
-      // td dias: ruper_vital in (10007)
-      ->andWhere(['in', 'rv.kode', ['10006', '10007', '10010', '10009']])
-      ->andWhere(['rv.Id' => $subQuery])
+      ->andWhere([
+        'rv.kode' => [
+          '10006',
+          '10007',
+          '10009',
+          '10010',
+          '10011',
+        ],
+      ]);
+
+    $vitalQuery->andWhere([
+      'rv.Id' => (new Query())
+        ->select(['MIN(rv2.Id)'])
+        ->from(['rv2' => 'ruper_vital'])
+        ->where('rv2.noregis = rv.noregis')
+        ->andWhere('rv2.rm = rv.rm')
+        ->andWhere('rv2.kondisi = 1')
+        ->andWhere('rv2.kode = rv.kode'),
+    ]);
+
+    $vitalRows = $vitalQuery
+      ->orderBy(['rv.Id' => SORT_ASC])
       ->all($db1);
 
-    // ruper kajian
-    //     SELECT
-    //     rrk.*,
-    // 		rms_kode.kode AS nama_kode,
-    //     rms_kode.Nama AS nama_display,
-    // 		rms_main.mainkode AS nama_mainkode,
-    //     rms_main.Nama AS nama_maindisplay
-    // FROM ruper_ranap_kajian rrk
-    // LEFT JOIN ruper_m_setup rms_kode
-    //     ON rrk.kode = rms_kode.kode
-    // LEFT JOIN ruper_m_setup rms_main
-    //     ON rrk.mainkode = rms_main.kode
-    // WHERE rrk.noregis = '2602793'
-    //   AND rrk.rm = '205152'
-    //   AND rrk.Kondisi = 1;
 
-    // BB: ruper_ranap_kajian in (50472,50002) 
-    // TB: ruper_ranap_kajian in (50473)
+    /*
+     * Query 2: TB / BB
+     *
+     * 50472 = weight / BB
+     * 50473 = height / TB
+     */
+    $kajianQuery = (new Query())
+      ->select([
+        'rrk.Id',
+        'rrk.tanggal',
+        'rrk.rm',
+        'rrk.noregis',
+        'rrk.kode',
+        'rms.kode AS nama_kode',
+        'rms.Nama AS nama_display',
+        new Expression("
+                CASE rrk.kode
+                    WHEN '50472' THEN 'weight_kg'
+                    WHEN '50473' THEN 'height_cm'
+                END
+            AS observation_code"),
+        'rrk.Nilai AS nilai',
+      ])
+      ->from(['rrk' => 'ruper_ranap_kajian'])
+      ->leftJoin(
+        ['rms' => 'ruper_m_setup'],
+        'rrk.kode = rms.kode'
+      )
+      ->where([
+        'rrk.noregis' => $noregis,
+        'rrk.rm' => $rm,
+        'rrk.Kondisi' => 1,
+      ])
+      ->andWhere([
+        'rrk.kode' => [
+          '50472',
+          '50473',
+        ],
+      ]);
+
+    $kajianQuery->andWhere([
+      'rrk.Id' => (new Query())
+        ->select(['MIN(rrk2.Id)'])
+        ->from(['rrk2' => 'ruper_ranap_kajian'])
+        ->where('rrk2.noregis = rrk.noregis')
+        ->andWhere('rrk2.rm = rrk.rm')
+        ->andWhere('rrk2.Kondisi = 1')
+        ->andWhere('rrk2.kode = rrk.kode'),
+    ]);
+
+    $kajianRows = $kajianQuery
+      ->orderBy(['rrk.Id' => SORT_ASC])
+      ->all($db1);
 
 
-    if (!$result) {
+    /*
+     * Tidak ada data sama sekali
+     */
+    if (empty($vitalRows) && empty($kajianRows)) {
       return false;
     }
 
-    // $data['tanggal'] = $result['tanggal'];
-    // $data['rm'] = $result['rm'];
-    // $data['nama'] = $result['nama'];
-    // $data['kode_dokter'] = $result['dokter'];
-    // $data['nama_dokter'] = $result['rl_user'];
-    // $data['jenis'] = $result['jenis'];
-    // $data['poli'] = $result['poli'];
 
-    // $data['observation_data'] = SshtApiUtil::parseObservation($result['textisi']);
+    /*
+     * Gabungkan hasil kedua query
+     * berdasarkan observation_code
+     */
+    $observationData = [];
 
-    // return $data;
-    return $result;
+    foreach (array_merge($vitalRows, $kajianRows) as $row) {
+      $code = $row['observation_code'] ?? null;
+
+      if (!$code) {
+        continue;
+      }
+
+      $observationData[$code] = is_numeric($row['nilai'])
+        ? (float) $row['nilai']
+        : $row['nilai'];
+    }
+
+
+    if (empty($observationData)) {
+      return false;
+    }
+
+
+    /*
+     * Metadata dasar
+     */
+    $meta = $vitalRows[0] ?? $kajianRows[0];
+
+    return [
+      'tanggal' => $meta['tanggal'],
+      'rm' => $meta['rm'],
+      'noregis' => $meta['noregis'],
+      'observation_data' => $observationData,
+    ];
   }
 
   public static function queryProcedureGeneral(string $tanggal, string $rm)
