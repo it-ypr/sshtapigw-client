@@ -91,15 +91,13 @@ class SshtApiClientTestQueryController extends Controller
   public static function actionObservationVitalRanap($noregis, $tgl_param, $rm)
   {
     // $tgl_param = tanggal masuk pasien
-    $dataEncounter = SshtApiQueryMapping::queryObservationRanap($noregis, $tgl_param, $rm);
+    $dataEncounter = SshtApiQueryMapping::queryObservationRanap($noregis, $rm);
 
     if (empty($dataEncounter)) {
       echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
       // return ExitCode::OK;
     }
 
-    echo "Ditemukan Data Ranap: " . count($dataEncounter) . " data.\n";
-    // print_r($dataEncounter[0]);
     print_r($dataEncounter);
   }
 
