@@ -249,7 +249,11 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return (new Query())
       ->select([
         'mr_ranap.Id',
+        'mr_ranap.noregis',
         'mr_ranap.rm',
+
+        'mr_ranap_pulang.dokter',
+
         'mr_ranap.tglkeluar',
         'mr_ranap.ruper',
         'mr_ranap.kelas',
@@ -515,6 +519,106 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     $data['observation_data'] = SshtApiUtil::parseObservation($result['textisi']);
 
     return $data;
+  }
+
+
+  /**
+   * Query lokal observation vital ranap
+   * @param string $tanggal
+   */
+  public static function queryObservationRanap(string $noregis, string $tanggal, string $rm)
+  {
+    $db1 = Yii::$app->db;
+
+    // SELECT
+    //     rv.*,
+    //     rms_kode.kode AS nama_kode,
+    //     rms_kode.Nama AS nama_display
+    // FROM ruper_vital rv
+    // LEFT JOIN ruper_m_setup rms_kode
+    //     ON rv.kode = rms_kode.kode
+    // WHERE rv.noregis = '2602793'
+    //   AND rv.rm = '205152'
+    //   AND rv.Kondisi = 1AND rv.kode in ('10006','10007')
+
+    // ruper_vital
+    $subQuery = (new Query())
+      ->select(['MIN(Id)'])
+      ->from('ruper_vital rv2')
+      ->where([
+        'rv2.tanggal' => $tanggal,
+        'rv2.rm' => $rm,
+        'rv2.noregis' => $noregis,
+        'rv2.Kondisi' => 1,
+      ])
+      ->andWhere('rv2.kode = rv.kode');
+
+    $result = (new Query())
+      ->select([
+        'rv.Id',
+        'rv.kode',
+        'rv.rm',
+        'mr.nama',
+        'rv.tanggal',
+        'rv.dokter',
+        'ms.rl_user',
+        'rms.kode AS nama_kode',
+        'rms.Nama AS nama_display',
+      ])
+      ->from(['rv' => 'ruper_vital'])
+      ->leftJoin(['rms' => 'ruper_m_setup'], 'rv.kode = rms.kode')
+      ->leftJoin(['mr' => 'mmr'], 'rv.rm = mmr.rm')
+      ->leftJoin(['msr' => 'muser'], 'rv.dokter = msr.id_user')
+      ->where([
+        'rv.tanggal' => $tanggal,
+        'rv.rm' => $rm,
+        'rv.noregist' => $noregis,
+        'rv.Kondisi' => 1,
+      ])
+      // suhu: ruper_vital in (10010)
+      // nadi: ruper_vital in (10009)
+      // td sys: ruper_vital in (10006)
+      // td dias: ruper_vital in (10007)
+      ->andWhere(['in', 'rv.kode', ['10006', '10007', '10010', '10009']])
+      ->andWhere(['rv.Id' => $subQuery])
+      ->all($db1);
+
+    // ruper kajian
+    //     SELECT
+    //     rrk.*,
+    // 		rms_kode.kode AS nama_kode,
+    //     rms_kode.Nama AS nama_display,
+    // 		rms_main.mainkode AS nama_mainkode,
+    //     rms_main.Nama AS nama_maindisplay
+    // FROM ruper_ranap_kajian rrk
+    // LEFT JOIN ruper_m_setup rms_kode
+    //     ON rrk.kode = rms_kode.kode
+    // LEFT JOIN ruper_m_setup rms_main
+    //     ON rrk.mainkode = rms_main.kode
+    // WHERE rrk.noregis = '2602793'
+    //   AND rrk.rm = '205152'
+    //   AND rrk.Kondisi = 1;
+
+    // BB: ruper_ranap_kajian in (50472,50002) 
+    // TB: ruper_ranap_kajian in (50473)
+
+
+    if (!$result) {
+      return false;
+    }
+
+    // $data['tanggal'] = $result['tanggal'];
+    // $data['rm'] = $result['rm'];
+    // $data['nama'] = $result['nama'];
+    // $data['kode_dokter'] = $result['dokter'];
+    // $data['nama_dokter'] = $result['rl_user'];
+    // $data['jenis'] = $result['jenis'];
+    // $data['poli'] = $result['poli'];
+
+    // $data['observation_data'] = SshtApiUtil::parseObservation($result['textisi']);
+
+    // return $data;
+    return $result;
   }
 
   public static function queryProcedureGeneral(string $tanggal, string $rm)
@@ -1302,33 +1406,116 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $result;
   }
 
+  // public static function getObservationLabLocalRalan(
+  //   string $tgl_param,
+  //   string $rm,
+  //   string $loinc_order
+  // ) {
+  //   // query 1
+  //   $result1 = (new Query())
+  //     ->select([
+  //       'lnb.Id',
+  //       'lnb.rm',
+  //       'lnb.nama',
+  //       'lnb.tanggal',
+  //       'lnb.NoTest',
+  //     ])
+  //     ->from(['lnb' => 'lab_newbiodata'])
+  //     ->leftJoin('muser m', 'lnb.id_user = m.nik')
+  //     ->where([
+  //       'lnb.tanggal' => $tgl_param,
+  //       'lnb.rm' => $rm,
+  //     ])
+  //     ->one(Yii::$app->db);
+  //
+  //   if (!$result1) {
+  //     return false;
+  //   }
+  //
+  //   // query 2
+  //   $result2 = (new Query())
+  //     ->select([
+  //       'lh.SAMPEL_ID',
+  //       'lh.PASIEN_ID as rm',
+  //       'lh.TEST_ID',
+  //       'lh.RESULT_VALUE',
+  //       'lh.SATUAN',
+  //       'lh.ANGKA_NORMAL as referenceRange',
+  //       // 'lh.METODE',
+  //       'lmh.id_lab',
+  //       'lmh.loinc_code',
+  //       'llo.loinc_order_code',
+  //       // 'll.nama_pemeriksaan',
+  //       // 'll.spesimen',
+  //       // 'll.display',
+  //       // 'll.tipe_hasil_pemeriksaan as scale',
+  //       // 'll.metode_analisis as metode',
+  //     ])
+  //     ->from(['lh' => 'lis_hasil'])
+  //     ->innerJoin(['lmh' => 'loinc_map_hasil'], 'lh.TEST_ID = lmh.id_lab')
+  //     ->innerJoin(['llo' => 'loinc_lab_order'], 'lmh.loinc_code = llo.loinc_code')
+  //     // ->innerJoin(['ll' => 'loinc_lab'], 'lmh.loinc_code = ll.code')
+  //     ->where([
+  //       'lh.SAMPEL_ID' => $result1['NoTest'],
+  //       'llo.loinc_order_code' => $loinc_order,
+  //     ])
+  //     ->all(Yii::$app->db);
+  //
+  //   // get Loinc lab & speciment dari dbterminologi:
+  //   $loincCodes = array_unique(array_column($result2, 'loinc_code'));
+  //
+  //   $loincRows = (new Query())
+  //     ->from('loinc_lab')
+  //     ->where(['code' => $loincCodes])
+  //     ->all(Yii::$app->dbsshtterminologi);
+  //
+  //   $loincMap = [];
+  //
+  //   foreach ($loincRows as $row) {
+  //     $loincMap[$row['code']] = $row;
+  //   }
+  //
+  //   // $data = $result2;
+  //
+  //   if (!$result2) {
+  //     return false;
+  //   }
+  //
+  //   // Merge data terminologi ke hasil query
+  //   $data = [];
+  //
+  //   foreach ($result2 as $row) {
+  //
+  //     // join loinc data
+  //     $loinc = $loincMap[$row['loinc_code']] ?? [];
+  //
+  //     // require..
+  //     // 'll.nama_pemeriksaan',
+  //     // 'll.spesimen',
+  //     // 'll.display',
+  //     // 'll.tipe_hasil_pemeriksaan as scale',
+  //     // 'll.metode_analisis as metode',
+  //
+  //     $data[] = array_merge($row, [
+  //       'nama_pemeriksaan' => $loinc['nama_pemeriksaan'] ?? null,
+  //       'spesimen' => $loinc['spesimen'] ?? null,
+  //       'display' => $loinc['display'] ?? null,
+  //       'scale' => $loinc['tipe_hasil_pemeriksaan'] ?? null,
+  //       'metode' => $loinc['metode_analisis'] ?? null,
+  //     ]);
+  //   }
+  //
+  //   return $data;
+  // }
+
   public static function getObservationLabLocalRalan(
-    string $tgl_param,
-    string $rm,
-    string $loinc_order
+    string $loinc_order,
+    string $test_id,
   ) {
-    // query 1
-    $result1 = (new Query())
-      ->select([
-        'lnb.Id',
-        'lnb.rm',
-        'lnb.nama',
-        'lnb.tanggal',
-        'lnb.NoTest',
-      ])
-      ->from(['lnb' => 'lab_newbiodata'])
-      ->leftJoin('muser m', 'lnb.id_user = m.nik')
-      ->where([
-        'lnb.tanggal' => $tgl_param,
-        'lnb.rm' => $rm,
-      ])
-      ->one(Yii::$app->db);
 
-    if (!$result1) {
-      return false;
-    }
+    $testId = explode('-', $test_id);
+    $testIdTok = $testId[0];
 
-    // query 2
     $result2 = (new Query())
       ->select([
         'lh.SAMPEL_ID',
@@ -1352,7 +1539,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->innerJoin(['llo' => 'loinc_lab_order'], 'lmh.loinc_code = llo.loinc_code')
       // ->innerJoin(['ll' => 'loinc_lab'], 'lmh.loinc_code = ll.code')
       ->where([
-        'lh.SAMPEL_ID' => $result1['NoTest'],
+        'lh.SAMPEL_ID' => $testIdTok,
         'llo.loinc_order_code' => $loinc_order,
       ])
       ->all(Yii::$app->db);
@@ -1403,6 +1590,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return $data;
   }
+
 
 
   public static function getObservationLabLocalUgd(
@@ -1488,4 +1676,3 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
     return $data;
   }
 }
-

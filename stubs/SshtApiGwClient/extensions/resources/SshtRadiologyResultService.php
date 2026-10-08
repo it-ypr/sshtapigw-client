@@ -58,6 +58,8 @@ class SshtRadiologyResultService
     string $encounterClass,
     string $label
   ): void {
+    sleep(30);
+
     echo "--- TASK SSHT Observation & DiagnosticReport Radio ({$label}): [{$tgl_param}] ---\n";
 
     try {

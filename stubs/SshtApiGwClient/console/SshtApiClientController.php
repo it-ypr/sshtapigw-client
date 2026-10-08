@@ -82,6 +82,8 @@ class SshtApiClientController extends Controller
     // RANAP - inprogress 
     // // encounter & diagnosa
     $this->actionSendEncounterRanap($tgl_param);
+    // // encounter finish
+    $this->actionSendEncounterFinishRanap($tgl_param);
     // // observasi vital
     // $this->actionSendObservationRanap($tgl_param);
     // // general procedure
@@ -105,13 +107,13 @@ class SshtApiClientController extends Controller
   public function actionSendTaskUgd(string $tgl_param)
   {
     // // UGD - inprogress 
-    // // // encounter & diagnosa
+    // // encounter & diagnosa
     $this->actionSendEncounterUgd($tgl_param);
     // // // // observasi vital
     $this->actionSendObservationUgd($tgl_param);
     // // // // general procedure
     $this->actionSendProcedureGeneralUgd($tgl_param);
-    // // // // // serviceRequest Radiologi
+    // // // // serviceRequest Radiologi
     $this->actionSendServiceRequestRadioUgd($tgl_param);
     // // // // imagingStudy
     $this->actionSendImagingStudyUgd($tgl_param);
@@ -187,6 +189,16 @@ class SshtApiClientController extends Controller
   public function actionSendEncounterFinishRalanSingleLocalRank($tgl_param, $rm_param)
   {
     (new SshtEncounterService())->sendFinishRalanSingleLocalRank($tgl_param, $rm_param);
+  }
+
+  /**
+   * Run Cron: php yii ssht-api-client/send-encounter-finish-ranap 2026-05-01
+   *
+   * param: tgl_param = tgl_masuk pasien
+   */
+  public function actionSendEncounterFinishRanap($tgl_param)
+  {
+    (new SshtEncounterService())->sendFinishRanap($tgl_param);
   }
 
   // /**
@@ -347,6 +359,15 @@ class SshtApiClientController extends Controller
   public function actionSendObservationUgd($tgl_param)
   {
     (new SshtObservationService())->sendUgd($tgl_param);
+  }
+
+  /**
+   * php yii ssht-api-client/send-observation-ranap 2026-05-01
+   */
+  // public function actionSendObservationRalan($tanggal, $rm)
+  public function actionSendObservationRanap($tgl_param)
+  {
+    (new SshtObservationService())->sendRanap($tgl_param);
   }
 
   /**

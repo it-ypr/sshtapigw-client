@@ -86,6 +86,24 @@ class SshtApiClientTestQueryController extends Controller
   }
 
   /**
+   * Run: php yii ssht-test-query/observation-vital-ranap xxxx 2025-05-01 xxxxx
+   */
+  public static function actionObservationVitalRanap($noregis, $tgl_param, $rm)
+  {
+    // $tgl_param = tanggal masuk pasien
+    $dataEncounter = SshtApiQueryMapping::queryObservationRanap($noregis, $tgl_param, $rm);
+
+    if (empty($dataEncounter)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan Data Ranap: " . count($dataEncounter) . " data.\n";
+    // print_r($dataEncounter[0]);
+    print_r($dataEncounter);
+  }
+
+  /**
    * Run: php yii ssht-test-query/lab-ralan-test 2025-05-01 rm
    */
   public static function actionLabRalanTest(string $tgl_param, string $rm_param)

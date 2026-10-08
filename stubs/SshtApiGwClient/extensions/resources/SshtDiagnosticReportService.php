@@ -144,6 +144,7 @@ class SshtDiagnosticReportService
       }
 
       foreach ($serviceRequestLab as $srlab) {
+        print_r($srlab);
         $this->sendLabDiagnosticReport(
           tgl_param: $tgl_param,
           srlab: $srlab
@@ -418,6 +419,16 @@ class SshtDiagnosticReportService
       'srid' => $srlab['srid'],
     ];
 
+    $this->stdout(
+      "  [>] Kirim DiagnosticReport Lab, RM: {$rm}\n"
+    );
+
+    $this->stdout(
+      "      Payload: " .
+        json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) .
+        "\n"
+    );
+
     if (
       !$this->debugger->allow(
         context: SshtApiUtil::genDebugContext(
@@ -429,17 +440,29 @@ class SshtDiagnosticReportService
       return;
     }
 
-    $resR = SshtApiBase::request(
-      SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB,
-      [
-        'json' => $payload
-      ]
-    );
+    try {
 
-    if (
-      $resR->getStatusCode() == 200 ||
-      $resR->getStatusCode() == 201
-    ) {
+      $resR = SshtApiBase::request(
+        SshtApiUrl::DIAGNOSTIC_REPORT_CREATE_LAB,
+        [
+          'json' => $payload
+        ]
+      );
+
+      if (
+        $resR->getStatusCode() != 200 &&
+        $resR->getStatusCode() != 201
+      ) {
+
+        $this->stdout(
+          "  [!] DiagnosticReport gagal untuk RM {$rm}. " .
+            "HTTP Status: {$resR->getStatusCode()}. " .
+            "Kemungkinan Observation belum tersedia atau data belum lengkap.\n"
+        );
+
+        return;
+      }
+
       $resRReq = json_decode(
         (string) $resR->getBody(),
         true
@@ -492,14 +515,22 @@ class SshtDiagnosticReportService
       );
 
       return;
-    }
 
-    $this->stdout(
-      "  [Gagal] Gagal save di db, " .
-        "diagnosticreport_idIHS: " .
-        ($resDataR['diagnosticreport_idIHS'] ?? '-') .
-        ", RM {$rm}.\n"
-    );
+      // $this->stdout(
+      //   "  [Gagal] Gagal save di db, " .
+      //     "diagnosticreport_idIHS: " .
+      //     ($resDataR['diagnosticreport_idIHS'] ?? '-') .
+      //     ", RM {$rm}.\n"
+      // );
+
+    } catch (\Throwable $e) {
+      $this->stdout(
+        "  [!] DiagnosticReport error untuk RM {$rm}: " .
+          $e->getMessage() . "\n"
+      );
+
+      return;
+    }
   }
 
   private function stdout(string $message): void

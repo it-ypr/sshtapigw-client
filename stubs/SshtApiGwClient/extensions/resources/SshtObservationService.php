@@ -120,6 +120,53 @@ class SshtObservationService
     }
   }
 
+  public function sendRanap(string $tgl_param): void
+  {
+    $class = 'IMP';
+
+    try {
+      $encounters = $this->getVitalEncounters(
+        tgl_param: $tgl_param,
+        encounterClass: $class
+      );
+
+      if (empty($encounters)) {
+        $this->stdout(
+          "[!] Tydac ada data encounter tanggal {$tgl_param}\n"
+        );
+        return;
+      }
+
+      foreach ($encounters as $enc) {
+        $rm = $enc['subject_rm'];
+
+        $simrsobs =
+          SshtApiQueryMapping::queryObservationRanap(
+            noregis: $enc['noregis'],
+            tanggal: $tgl_param,
+            rm: $rm
+          );
+
+        if (!$simrsobs) {
+          $this->stdout(
+            "[-] SKIP: RM {$rm} tydac ada data observasi vital\n"
+          );
+          continue;
+        }
+
+        $this->sendVitalObservations(
+          enc: $enc,
+          simrsobs: $simrsobs
+        );
+      }
+    } catch (Exception $e) {
+      $this->stdout(
+        "[CRITICAL] " . $e->getMessage() . "\n"
+      );
+    }
+  }
+
+
   public function createRadio(
     string $servicerequestIdIhs,
     string $imagingstudyIdIhs,
@@ -269,11 +316,17 @@ class SshtObservationService
           continue;
         }
 
+        // $obsLabs =
+        //   SshtApiQueryMapping::getObservationLabLocalRalan(
+        //     $tgl_param,
+        //     $srrm,
+        //     $srlab['sr_code']
+        //   );
+
         $obsLabs =
           SshtApiQueryMapping::getObservationLabLocalRalan(
-            $tgl_param,
-            $srrm,
-            $srlab['sr_code']
+            $srlab['sr_code'],
+            $srlab['lokal_sampleID_testID']
           );
 
         if (!$obsLabs) {
@@ -337,9 +390,6 @@ class SshtObservationService
           continue;
         }
 
-        // NOTE:
-        // Sesuai logic existing, UGD tetap menggunakan
-        // queryObservationLabLocalRalan().
         $obsLabs =
           SshtApiQueryMapping::getObservationLabLocalUgd(
             $srlab['sr_code'],
@@ -576,18 +626,18 @@ class SshtObservationService
         $labloinc['unit_of_measure'],
       ];
 
+      print_r($payloadObs);
+      $simrsValueQty = (float) $payloadObs['valueQuantity'];
+
       $checkObsLokal = (new Query())
         ->from('ssht_observation sso')
         ->where([
-          'sso.encounter_idIHS' =>
-          $srlab['encounter_idIHS'],
-
+          'sso.encounter_idIHS' => $srlab['encounter_idIHS'],
           'rm' => $srrm,
-
-          'status' => 'active',
-
-          'obs_code' =>
-          $payloadObs['code-obs'],
+          'category_code' => 'laboratory',
+          'obs_code' => $payloadObs['code-obs'],
+          'obs_display' => $payloadObs['code-display'],
+          'obs_value' => $simrsValueQty,
         ])
         ->exists($this->dbLocal);
 
@@ -740,6 +790,7 @@ class SshtObservationService
         'practition_idIHS',
         'inprogress_start',
         'class',
+        'noregis',
       ])
       ->from('ssht_encounter')
       ->where([
