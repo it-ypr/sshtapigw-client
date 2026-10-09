@@ -79,15 +79,15 @@ class SshtApiClientController extends Controller
    */
   public function actionSendTaskRanap(string $tgl_param)
   {
-    // RANAP - inprogress 
-    // // encounter & diagnosa
+    // // RANAP - inprogress 
+    // // // encounter & diagnosa
     $this->actionSendEncounterRanap($tgl_param);
     // // encounter finish
     $this->actionSendEncounterFinishRanap($tgl_param);
     // // observasi vital
     $this->actionSendObservationRanap($tgl_param);
     // // general procedure
-    // $this->actionSendProcedureGeneralRanap($tgl_param);
+    $this->actionSendProcedureGeneralRanap($tgl_param);
     // // serviceRequest Radiologi
     // $this->actionSendServiceRequestRadio($tgl_param);
     // // imagingStudy
@@ -384,6 +384,14 @@ class SshtApiClientController extends Controller
   public function actionSendProcedureGeneralUgd($tgl_param)
   {
     (new SshtProcedureService())->sendGeneralUgd($tgl_param);
+  }
+
+  /**
+   * php yii ssht-api-client/send-procedure-general-ugd 2026-05-01
+   */
+  public function actionSendProcedureGeneralRanap($tgl_param)
+  {
+    (new SshtProcedureService())->sendGeneralRanap($tgl_param);
   }
 
   /**

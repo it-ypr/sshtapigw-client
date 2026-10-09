@@ -346,7 +346,7 @@ class SshtProcedureService
           'CAST(inprogress_start AS DATE)' => $tgl_param
         ])
         ->andWhere([
-          'class' => 'INP'
+          'class' => 'IMP'
         ])
         ->all($this->dbLocal);
 

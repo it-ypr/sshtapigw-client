@@ -174,6 +174,19 @@ class SshtApiClientTestQueryController extends Controller
   }
 
   /**
+   * php yii ssht-test-query/procedure-general-ranap 2025-09-27 055129
+   */
+  public function actionProcedureGeneralRanap(string $tanggal, string $rm)
+  {
+    $simrsobs = SshtApiQueryMapping::queryProcedureGeneralRanap($tanggal, $rm);
+    if ($simrsobs) {
+      print_r($simrsobs);
+    } else {
+      echo "\ntidak ditemukan data procedure.\n";
+    }
+  }
+
+  /**
    * php yii ssht-test-query/send-observation-ralan-test 2026-05-01 rm
    */
   public function actionSendObservationRalanTest($tanggal, $rm)

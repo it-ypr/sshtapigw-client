@@ -837,15 +837,16 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         't1.procedure',
         't2.dokter',
         't4.rl_user',
-        't1.noregis',
+        't2.noregis',
       ])
       ->from(['t1' => 'mr_casemix_ranap_pc'])
       ->leftJoin(['t2' => 'mr_casemix_ranap'], 't1.id_casemix = t2.Id')
       ->leftJoin(['t3' => 'mmr'], 't2.rm = t3.rm')
       ->leftJoin(['t4' => 'muser'], 't2.dokter = t4.id_user')
       ->where([
-        't2.tglmasuk' => $tanggal,
-        't2.rm' => $rm,
+        'and',
+        ['like', 't2.tglmasuk', $tanggal . '%', false],
+        ['t2.rm' => $rm],
       ])
       ->all($db1);
 
@@ -873,13 +874,13 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ];
     }
 
-    $data['tanggal'] = $first['tanggal'];
+    $data['tanggal'] = $first['tglmasuk'];
     $data['rm_pasien'] = $first['rm'];
     $data['nama_pasien'] = $first['nama'];
     $data['kode_dokter'] = $first['dokter'];
     $data['nama_dokter'] = $first['rl_user'];
     $data['procedures'] = $procedures;
-    $data['kode_poli'] = $first['poli'];
+    // $data['kode_poli'] = $first['poli'];
 
     return $data;
   }
