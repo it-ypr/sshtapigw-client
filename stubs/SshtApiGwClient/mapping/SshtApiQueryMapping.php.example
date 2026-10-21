@@ -252,9 +252,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'mr_ranap.Id',
         'mr_ranap.noregis',
         'mr_ranap.rm',
-
         'mr_ranap_pulang.dokter',
-
         'mr_ranap.tglkeluar',
         'mr_ranap.ruper',
         'mr_ranap.kelas',
@@ -262,25 +260,22 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'mr_ranap.procmasuk',
         'mr_ranap.ondelete',
         // 'mr_ranap.*',
-
         'TRIM(mr_ktp.ktp) AS ktp',
         'TRIM(mmr.nama) AS pasien_nama',
         'TRIM(muser.nm_user) AS dokter_nama',
         'TRIM(muser.idssht) AS dokter_ihs',
-
         "GROUP_CONCAT(
               DISTINCT RTRIM(mr_kunjungan_ranap.icd)
               SEPARATOR ';'
           ) AS icd_codes",
-
         'mr_ranap.tglmasuk AS tgl_jam_masuk',
-
-        "CONCAT(
-              mr_ranap_pulang.tglkeluar,
-              ' ',
-              mr_ranap_pulang.jamkeluar,
-              ':00'
-          ) AS tgl_jam_keluar",
+        // "CONCAT
+        //       mr_ranap_pulang.tglkeluar,
+        //       ' ',
+        //       mr_ranap_pulang.jamkeluar,
+        //       ':00'
+        //   ) AS tgl_jam_keluar",
+        'mr_ranap.tglkeluar AS tgl_jam_keluar',
       ])
       ->from('mr_ranap_pulang')
       ->leftJoin('mr_ranap', 'mr_ranap_pulang.noregis = mr_ranap.noregis')
@@ -294,8 +289,15 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->andWhere(['not', ['mr_ranap_pulang.jamkeluar' => null]])
       ->andWhere(['<>', 'mr_ranap_pulang.jamkeluar', ''])
       ->andWhere(["mr_ranap.ondelete" => 0])
-      ->andWhere("STR_TO_DATE(mr_ranap_pulang.jamkeluar, '%H:%i') IS NOT NULL")
-      ->andWhere(['like', "mr_ranap.ruper", 'CB' . '%', false]) // saat ini baru pake cb sek ges
+      // ->andWhere("STR_TO_DATE(mr_ranap_pulang.jamkeluar, '%H:%i') IS NOT NULL")
+      // ->andWhere(['like', "mr_ranap.ruper", 'CB' . '%', false]) // saat ini baru pake cb sek ges
+      // ->andWhere(['like', "mr_ranap.ruper", 'EG' . '%', false]) // saat ini baru pake cb sek ges
+      ->andWhere([
+        'or',
+        ['like', "mr_ranap.ruper", 'CB' . '%', false],
+        ['like', "mr_ranap.ruper", 'ANT' . '%', false],
+        ['like', "mr_ranap.ruper", 'EG' . '%', false],
+      ]) // saat ini baru pake cb sek ges
       ->groupBy(['mr_ranap.noregis'])
       ->all($dbSimrs);
   }
@@ -1369,7 +1371,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
           'sampling_method' =>
           $loinc['spesimen'] ?? null,
-        ],
+        ]
       ];
     }
 
@@ -1409,7 +1411,7 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
         'lg.Id as id_local',
         'rob.medication_idIHS',
         'lg.kode_brg',
-        'lg.nama',
+        'trim(lg.nama) as nama',
         'rob.kfa_code',
         'rob.kfa_display',
         'fr.jumlah',
@@ -1436,7 +1438,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
       ->leftJoin('muser as mp', 'fbio.id_user = mp.nik')
       // ->leftJoin('muser as ma', 'fbio.id_ambil = ma.nik')
       ->leftJoin('muser as ma', 'fbio.petugas = ma.nik')
-      ->where(['fbio.rm' => $rm_param]);
+      ->where(['fbio.rm' => $rm_param])
+      ->andWhere(['not like', 'TRIM(lg.nama)', '%NEB', false])
+      ->orderBy('fr.Id ASC');
 
     $data = $query->all($db1);
 
@@ -1816,4 +1820,9 @@ class SshtApiQueryMapping implements SshtApiQueryRepository
 
     return $data;
   }
+
+  public static function getClinicalImpresRiwayatPenyakitRalan() {}
+  public static function getClinicalImpresRiwayatPenyakitUgd() {}
+  public static function getClinicalImpresRiwayatPenyakitRanap() {}
 }
+

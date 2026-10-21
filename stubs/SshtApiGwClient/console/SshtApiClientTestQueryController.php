@@ -244,4 +244,92 @@ class SshtApiClientTestQueryController extends Controller
 
     print_r($rows);
   }
+
+  /**
+   * Run:
+   * php yii ssht-test-query/medication-ralan 2026-10-01 311957
+   */
+  public static function actionMedicationRalan(
+    string $tgl_param,
+    string $rm
+  ) {
+    $dataObat = SshtApiQueryMapping::queryMedicationRalan(
+      $tgl_param,
+      $rm
+    );
+
+    if (empty($dataObat)) {
+      echo "Data tidak ditemukan untuk tanggal {$tgl_param}\n";
+      return;
+    }
+
+    echo "\n========== DATA MENTAH ==========\n";
+    echo "Jumlah: " . count($dataObat) . "\n";
+    print_r($dataObat);
+
+    $grouped = SshtApiUtil::groupMedicationRows($dataObat);
+
+    echo "\n========== HASIL GROUPING ==========\n";
+    echo "Jumlah MedicationRequest: "
+      . count($grouped['items']) . "\n";
+
+    foreach ($grouped['items'] as $i => $item) {
+      echo "\n--- ITEM " . ($i + 1) . " ---\n";
+      echo "Type: " . $item['type'] . "\n";
+      echo "Identifier: "
+        . $item['identifier_noresep_index'] . "\n";
+
+      if ($item['type'] === 'NC') {
+        echo "Nama: "
+          . ($item['row']['nama'] ?? '-') . "\n";
+
+        echo "Kode: "
+          . ($item['row']['kode_brg'] ?? '-') . "\n";
+
+        echo "Jumlah: "
+          . ($item['row']['jumlah'] ?? '-') . "\n";
+      } else {
+        echo "Header: "
+          . ($item['header']['nama'] ?? '-') . "\n";
+
+        echo "Kode: "
+          . ($item['header']['kode_brg'] ?? '-') . "\n";
+
+        echo "Jumlah: "
+          . ($item['header']['jumlah'] ?? '-') . "\n";
+
+        echo "Komposisi: "
+          . count($item['ingredients']) . " bahan\n";
+
+        foreach ($item['ingredients'] as $ingredient) {
+          echo "  - "
+            . ($ingredient['nama'] ?? '-') . " | "
+            . ($ingredient['kode_brg'] ?? '-') . " | "
+            . ($ingredient['jumlah'] ?? '-') . "\n";
+        }
+      }
+    }
+
+    echo "\n========== UNCLASSIFIED ==========\n";
+    print_r($grouped['unclassified']);
+  }
+
+  // /**
+  //  * Run: php yii ssht-test-query/medication-ralan 2025-05-01 rm
+  //  */
+  // public static function actionMedicationRalan(string $tgl_param, string $rm)
+  // {
+  //   // $tgl_param = tanggal masuk pasien
+  //   $dataObat = SshtApiQueryMapping::queryMedicationRalan($tgl_param, $rm);
+  //
+  //   if (empty($dataObat)) {
+  //     echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+  //     // return ExitCode::OK;
+  //   }
+  //
+  //   echo "Ditemukan Data obat: " . count($dataObat) . " data.\n";
+  //   // print_r($dataEncounter[0]);
+  //   print_r($dataObat);
+  // }
+
 }
