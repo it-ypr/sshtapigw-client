@@ -198,6 +198,17 @@ class SshtApiUtil
    */
   public static function groupMedicationRows(array $rows): array
   {
+    // Mapping kode cangkang kode obat racikan.
+    // Case: rsprin
+    // nama, kode_brg, Id
+    // 'RACIKAN PUYER', 'LD0604', '27239',
+    // 'RACIKAN CAPSUL', 'LD0605', '27240',
+    // 'RACIKAN DRANK', 'LD0614', '27241',
+    // 'RACIKAN IN POT', 'Z2005515', '28930',
+    // 'RACIKAN POT KOSMETIK', 'Z2020175', '35003',
+    // 'RACIKAN POT KOSMETIK', 'Z2020175', '35003',
+    // 'RACIKAN BOTOL', 'Z2021089', '35528',
+    // 'RACIKAN SALEP/KRIM', 'LD0616', '35529'
     $shellCodes = [
       'LD0604',
       'LD0605',
@@ -219,17 +230,18 @@ class SshtApiUtil
 
     /*
      * STEP 2.
-     * Normalisasi mutasi berdasarkan:
-     * tanggal + RM + resep + kode_brg.
+     * Rekonsiliasi mutasi berdasarkan urutan Id.
      *
-     * Contoh:
-     * LD0605 +10
-     * LD0605 -10
-     * Hasil = 0, dibuang.
+     * Baris negatif mengoreksi kemunculan positif sebelumnya
+     * yang paling dekat, dengan tanggal + RM + resep + kode_brg sama.
      *
-     * Obat biasa juga dinormalisasi dengan aturan sama.
+     * Setiap kemunculan positif dipertahankan terpisah.
+     * Ini penting agar dua cangkang dengan kode sama tidak digabung.
      */
-    $totals = [];
+
+    $activeRows = [];
+    $positiveOccurrences = [];
+    $unclassified = [];
 
     foreach ($rows as $row) {
       $kode = trim((string) ($row['kode_brg'] ?? ''));
@@ -241,36 +253,85 @@ class SshtApiUtil
         $kode,
       ]);
 
-      if (!isset($totals[$key])) {
-        $totals[$key] = [
-          'row' => $row,
-          'jumlah' => 0.0,
-        ];
+      $jumlah = (float) ($row['jumlah'] ?? 0);
+
+      if ($jumlah > 0) {
+        // Simpan setiap kemunculan sebagai baris tersendiri.
+        $row['jumlah'] = $jumlah;
+        $activeIndex = count($activeRows);
+
+        $activeRows[] = $row;
+        $positiveOccurrences[$key][] = $activeIndex;
+
+        continue;
       }
 
-      $totals[$key]['jumlah'] +=
-        (float) ($row['jumlah'] ?? 0);
+      if ($jumlah == 0.0) {
+        continue;
+      }
+
+      /*
+       * Jumlah negatif:
+       * koreksi kemunculan positif sebelumnya yang paling dekat.
+       * Jika tidak cukup, lanjutkan ke kemunculan sebelumnya.
+       */
+      $remainingCorrection = abs($jumlah);
+      $occurrences = $positiveOccurrences[$key] ?? [];
+
+      for (
+        $i = count($occurrences) - 1;
+        $i >= 0 && $remainingCorrection > 0;
+        $i--
+      ) {
+        $activeIndex = $occurrences[$i];
+
+        $available = (float) (
+          $activeRows[$activeIndex]['jumlah'] ?? 0
+        );
+
+        if ($available <= 0) {
+          continue;
+        }
+
+        $deduction = min($available, $remainingCorrection);
+
+        $activeRows[$activeIndex]['jumlah'] =
+          $available - $deduction;
+
+        $remainingCorrection -= $deduction;
+      }
+
+      /*
+       * Koreksi yang tidak memiliki target dicatat untuk audit.
+       * Jangan diam-diam mengurangi item dengan kode berbeda.
+       */
+      if ($remainingCorrection > 0) {
+        $unclassified[] = [
+          'reason' => 'UNMATCHED_NEGATIVE_MUTATION',
+          'row' => $row,
+          'unmatched_quantity' => $remainingCorrection,
+        ];
+      }
     }
 
+    // Buang baris yang jumlah akhirnya sudah nol.
     $normalized = [];
 
-    foreach ($totals as $entry) {
-      $jumlah = $entry['jumlah'];
+    foreach ($activeRows as $row) {
+      $jumlah = (float) ($row['jumlah'] ?? 0);
 
-      // Nol atau negatif tidak dikirim.
       if ($jumlah <= 0) {
         continue;
       }
 
-      $row = $entry['row'];
       $row['jumlah'] = (string) $jumlah;
-
       $normalized[] = $row;
     }
 
     usort($normalized, static function ($a, $b) {
-      return (int) ($a['Id'] ?? 0)
-        <=> (int) ($b['Id'] ?? 0);
+      return (int) ($a['Id'] ?? PHP_INT_MAX)
+        <=>
+        (int) ($b['Id'] ?? PHP_INT_MAX);
     });
 
     /*
@@ -291,17 +352,27 @@ class SshtApiUtil
     }
 
     $items = [];
-    $unclassified = [];
+    // $unclassified = [];
+
 
     foreach ($prescriptions as $prescriptionRows) {
-      $shells = [];
-      $ncRows = [];
-      $ingredientRows = [];
-
       /*
-         * STEP 4.
-         * Klasifikasi setelah normalisasi.
-         */
+   * STEP 4–6.
+   * Grouping berdasarkan urutan Id:
+   * - NC menjadi item individual.
+   * - Bahan tanpa aturan pakai ditampung sementara.
+   * - Ketika shell ditemukan, bahan yang tertampung
+   *   menjadi komposisi racikan shell tersebut.
+   */
+
+      // Pastikan urutan sumber konsisten.
+      usort($prescriptionRows, static function ($a, $b) {
+        return (int) ($a['Id'] ?? PHP_INT_MAX)
+          <=> (int) ($b['Id'] ?? PHP_INT_MAX);
+      });
+
+      $pendingIngredients = [];
+
       foreach ($prescriptionRows as $row) {
         $kode = trim((string) ($row['kode_brg'] ?? ''));
 
@@ -311,83 +382,76 @@ class SshtApiUtil
           true
         );
 
-        if ($isShell) {
-          $shells[] = $row;
-          continue;
-        }
-
         $hasAturanPakai =
           trim((string) ($row['kali'] ?? '')) !== ''
           || trim((string) ($row['hari'] ?? '')) !== '';
 
+        /*
+     * Shell diperiksa dahulu karena shell juga
+     * memiliki aturan pakai.
+     */
+        if ($isShell) {
+          $ingredients = $pendingIngredients;
+          $pendingIngredients = [];
+
+          if (empty($ingredients)) {
+            $unclassified[] = [
+              'reason' => 'SHELL_WITHOUT_INGREDIENTS',
+              'row' => $row,
+            ];
+
+            continue;
+          }
+
+          // Urutan racikan mengikuti bahan pertama
+          // atau shell, mana yang Id-nya paling kecil.
+          $sortIds = array_map(
+            static fn($ingredient) =>
+            (int) ($ingredient['Id'] ?? PHP_INT_MAX),
+            $ingredients
+          );
+
+          $sortIds[] = (int) ($row['Id'] ?? PHP_INT_MAX);
+
+          $items[] = [
+            'type' => 'RACIKAN',
+            'header' => $row,
+            'ingredients' => $ingredients,
+            // '_sort_id' => min($sortIds),
+            '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
+          ];
+
+          continue;
+        }
+
+        /*
+     * Obat dengan aturan pakai adalah NC individual.
+     */
         if ($hasAturanPakai) {
-          $ncRows[] = $row;
-        } else {
-          $ingredientRows[] = $row;
+          $items[] = [
+            'type' => 'NC',
+            'row' => $row,
+            '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
+          ];
+
+          continue;
         }
+
+        /*
+     * Bahan tanpa aturan pakai menunggu shell
+     * berikutnya.
+     */
+        $pendingIngredients[] = $row;
       }
 
       /*
-         * STEP 5.
-         * Bentuk item racikan.
-         *
-         * Satu cangkang aktif:
-         * semua obat tanpa aturan pakai menjadi komposisi.
-         *
-         * Lebih dari satu cangkang aktif:
-         * jangan menebak hubungan komposisi.
-         */
-      if (count($shells) === 1) {
-        $header = $shells[0];
-
-        $items[] = [
-          'type' => 'RACIKAN',
-          'header' => $header,
-          'ingredients' => $ingredientRows,
-          '_sort_id' => (int) ($header['Id'] ?? PHP_INT_MAX),
-          // '_sort_id' => min(
-          //   array_merge(
-          //     [(int) ($header['Id'] ?? PHP_INT_MAX)],
-          //     array_map(
-          //       static fn($row) =>
-          //       (int) ($row['Id'] ?? PHP_INT_MAX),
-          //       $ingredientRows
-          //     )
-          //   )
-          // ),
-        ];
-      } elseif (count($shells) > 1) {
-        foreach ($shells as $shell) {
-          $unclassified[] = [
-            'reason' => 'MULTIPLE_ACTIVE_SHELLS',
-            'row' => $shell,
-          ];
-        }
-
-        foreach ($ingredientRows as $row) {
-          $unclassified[] = [
-            'reason' => 'AMBIGUOUS_INGREDIENT',
-            'row' => $row,
-          ];
-        }
-      } else {
-        foreach ($ingredientRows as $row) {
-          $unclassified[] = [
-            'reason' => 'NO_ACTIVE_SHELL',
-            'row' => $row,
-          ];
-        }
-      }
-
-      /*
-         * STEP 6.
-         * NC selalu item individual.
-         */
-      foreach ($ncRows as $row) {
-        $items[] = [
-          'type' => 'NC',
-          'row' => $row,
-          '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
+   * Bahan yang tersisa tanpa shell tidak boleh
+   * otomatis dijadikan racikan.
+   */
+      foreach ($pendingIngredients as $ingredient) {
+        $unclassified[] = [
+          'reason' => 'NO_ACTIVE_SHELL',
+          'row' => $ingredient,
         ];
       }
     }
@@ -452,146 +516,4 @@ class SshtApiUtil
       'unclassified' => $unclassified,
     ];
   }
-
-  // /* 
-  //  * Grouping Medication/obat dari query
-  //  *
-  //  * untuk membagi identifier dan kelompok/jenis tipe obat
-  //  */
-  // public static function groupMedicationRows(array $rows): array
-  // {
-  //   // Mapping kode cangkang kode obat racikan.
-  //   // Case: RSPRin
-  //   // nama, kode_brg, Id
-  //   // 'RACIKAN PUYER', 'LD0604', '27239',
-  //   // 'RACIKAN CAPSUL', 'LD0605', '27240',
-  //   // 'RACIKAN DRANK', 'LD0614', '27241',
-  //   // 'RACIKAN IN POT', 'Z2005515', '28930',
-  //   // 'RACIKAN POT KOSMETIK', 'Z2020175', '35003',
-  //   // 'RACIKAN POT KOSMETIK', 'Z2020175', '35003',
-  //   // 'RACIKAN BOTOL', 'Z2021089', '35528',
-  //   // 'RACIKAN SALEP/KRIM', 'LD0616', '35529'
-  //   $shellCodes = [
-  //     'LD0604',
-  //     'LD0605',
-  //     'LD0614',
-  //     'Z2005515',
-  //     'Z2020175',
-  //     'Z2021089',
-  //     'LD0616',
-  //   ];
-  //
-  //   $items = [];
-  //   $unclassified = [];
-  //   $currentRacikan = null;
-  //
-  //   // 0.0 normalisasi by kode_brg & jumlah 
-  //   // if ada yang saling mengurangi = 0 -> pop array
-  //   foreach ($rows as $row) {
-  //     $kodeBarang = trim((string) ($row['kode_brg'] ?? ''));
-  //
-  //     $selectedCangkang = in_array(
-  //       $kodeBarang,
-  //       $shellCodes,
-  //       true
-  //     );
-  //
-  //     // normalisasi data misal ada id cangkang = 10 lalu kemudian ada lagi id cangkang yang sama namun dengan -10
-  //     // nanti di pop array..
-  //
-  //     // kalau kelebihan lalu hasilnya nanti masih positive tetep pake dengan jumlah yang telah di kurangkan 
-  //
-  //     // kalau hasilnya negative skip
-  //
-  //
-  //   }
-  //
-  //   // 0.1 generate identifier tanggal-noresep-index
-  //   // dengan case exist frm_ralan.kali & frm_ralan.hari & frm_ralan.sediaan & frm_ralan.waktu 
-  //   // maka dibuatkan identifier key id nya..
-  //
-  //   // 0.2 grouping medication by type NC / racikan
-  //   // case not in kode_brg = racikan() ['',''] and 
-  //   // isset($arr['tanggal-noresep-index']) == true 
-  //   //     then NC -> $arrNC[] => ['tanggal-noresep-index' => '', blabla..]
-  //
-  //   // 0.3 sort urutan record ke desc
-  //   // raw-racikan => $arr
-  //   // sort by tanggal-noresep-index desc 
-  //
-  //   // 0.4 generate ingredients racikan use key ($arr['tanggal-noresep-index'])
-  //   // and sort ke asc seperti semula by key $arr['tanggal-noresep-index']
-  //   // racikan => $arrRacik[] => generateIngredientRacik($arr)
-  //
-  //   // 0.5 merge gabung 2 array tersebut $arrRacik[] & $arrNC[] by key ($id = 'tanggal-noresep-index') asc
-  //
-  //   // Query sumber harus sudah ORDER BY fr.Id ASC.
-  //   foreach ($rows as $row) {
-  //     $kodeBarang = trim((string) ($row['kode_brg'] ?? ''));
-  //
-  //     $isHeader = in_array(
-  //       $kodeBarang,
-  //       $shellCodes,
-  //       true
-  //     );
-  //
-  //     // Sesuaikan definisi ini dengan aturan pakai
-  //     // yang benar-benar dipakai oleh SIMRS.
-  //     $hasAturanPakai =
-  //       trim((string) ($row['kali'] ?? '')) !== ''
-  //       || trim((string) ($row['hari'] ?? '')) !== '';
-  //
-  //     // 1. Header racikan selalu menjadi batas kelompok.
-  //     if ($isHeader) {
-  //       if ($currentRacikan !== null) {
-  //         $items[] = $currentRacikan;
-  //       }
-  //
-  //       $currentRacikan = [
-  //         'type' => 'RACIKAN',
-  //         'header' => $row,
-  //         'ingredients' => [],
-  //       ];
-  //
-  //       continue;
-  //     }
-  //
-  //     // 2. Baris tanpa aturan pakai di dalam kelompok
-  //     // aktif menjadi kandidat komposisi racikan.
-  //     if ($currentRacikan !== null && !$hasAturanPakai) {
-  //       $currentRacikan['ingredients'][] = $row;
-  //       continue;
-  //     }
-  //
-  //     // 3. Baris beraturan untuk mengakhiri kelompok
-  //     // sebelumnya, kemudian diproses sebagai NC.
-  //     if ($currentRacikan !== null) {
-  //       $items[] = $currentRacikan;
-  //       $currentRacikan = null;
-  //     }
-  //
-  //     if ($hasAturanPakai) {
-  //       $items[] = [
-  //         'type' => 'NC',
-  //         'row' => $row,
-  //       ];
-  //     } else {
-  //       // default case jenis item jika tidak ada
-  //       // header aktif dan aturan pakai kosong.
-  //       $unclassified[] = $row;
-  //     }
-  //   }
-  //
-  //   // 4. Flush kelompok terakhir, meskipun tidak ada NC.
-  //   if ($currentRacikan !== null) {
-  //     $items[] = $currentRacikan;
-  //   }
-  //
-  //   // 5. sort urutan ke asc
-  //
-  //   return [
-  //     'items' => $items,
-  //     'unclassified' => $unclassified,
-  //   ];
-  // }
 }
