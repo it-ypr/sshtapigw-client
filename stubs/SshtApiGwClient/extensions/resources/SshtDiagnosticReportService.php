@@ -184,6 +184,35 @@ class SshtDiagnosticReportService
     }
   }
 
+  public function sendLabRanap(string $tgl_param): void
+  {
+    echo "--- TASK SSHT DiagnosticReport Lab (RANAP): [{$tgl_param}] ---\n";
+
+    try {
+      $serviceRequestLab = $this->getLabServiceRequests(
+        tgl_param: $tgl_param,
+        encounterClass: 'IMP'
+      );
+
+      if (empty($serviceRequestLab)) {
+        $this->stdout(
+          "[!] Tydac ada data order serviceRequestLab tanggal {$tgl_param}\n"
+        );
+        return;
+      }
+
+      foreach ($serviceRequestLab as $srlab) {
+        print_r($srlab);
+        $this->sendLabDiagnosticReport(
+          tgl_param: $tgl_param,
+          srlab: $srlab
+        );
+      }
+    } catch (Exception $e) {
+      $this->stdout("[CRITICAL] " . $e->getMessage() . "\n");
+    }
+  }
+
   public function sendLabRalanSingle(
     string $tgl_param,
     string $rm
@@ -413,6 +442,7 @@ class SshtDiagnosticReportService
 
     $payload = [
       'servicerequest_idIHS' => $servicerequestId,
+      // sementara di default '-', karena data belum ada..
       'value' => '-',
       'speciment_idIHS' => $specimentId,
       'patient_idIHS' => $patient_idIHS,

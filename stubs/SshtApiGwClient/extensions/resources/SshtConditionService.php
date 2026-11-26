@@ -174,4 +174,36 @@ class SshtConditionService
       ->where(['icd10_code' => $uniqueCodes])
       ->all(Yii::$app->dbsshtterminologi);
   }
+
+
+  public function fixConditionRalanRankNullByLocalRowRank($tanggal)
+  {
+    $tanggal = date('Y-m-d', strtotime($tanggal));
+
+    $sql = "
+        UPDATE ssht_condition ssc
+        INNER JOIN (
+            SELECT
+                ssc2.id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ssc2.encounter_idIHS
+                    ORDER BY ssc2.id ASC
+                ) AS idx_fix
+            FROM ssht_encounter sse
+            INNER JOIN ssht_condition ssc2
+                ON sse.idIHS = ssc2.encounter_idIHS
+            WHERE sse.arrived_start LIKE :tanggal
+              AND sse.class = 'AMB'
+              AND ssc2.conditionRank IS NULL
+        ) AS patch
+            ON ssc.id = patch.id
+        SET ssc.conditionRank = patch.idx_fix
+        WHERE ssc.conditionRank IS NULL
+    ";
+
+    return $this->dbLocal
+      ->createCommand($sql)
+      ->bindValue(':tanggal', $tanggal . '%')
+      ->execute();
+  }
 }

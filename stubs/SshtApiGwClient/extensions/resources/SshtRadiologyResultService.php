@@ -53,6 +53,15 @@ class SshtRadiologyResultService
     );
   }
 
+  public function sendRanap(string $tgl_param): void
+  {
+    $this->send(
+      tgl_param: $tgl_param,
+      encounterClass: 'IMP',
+      label: 'Ranap'
+    );
+  }
+
   private function send(
     string $tgl_param,
     string $encounterClass,

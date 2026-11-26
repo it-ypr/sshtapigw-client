@@ -416,6 +416,73 @@ class SshtObservationService
     }
   }
 
+  public function sendLabRanap(string $tgl_param): void
+  {
+    echo "--- TASK SSHT Observation Lab (RANAP): [{$tgl_param}] ---\n";
+
+    try {
+      $serviceRequestLab = $this->getLabServiceRequests(
+        tgl_param: $tgl_param,
+        encounterClass: 'IMP'
+      );
+
+      if (empty($serviceRequestLab)) {
+        $this->stdout(
+          "[!] Tydac ada data order serviceRequestLab " .
+            "tanggal {$tgl_param}\n"
+        );
+        return;
+      }
+
+      foreach ($serviceRequestLab as $srlab) {
+        $srrm = $srlab['rm'];
+
+        if (
+          empty($srlab['servicerequest_idIHS']) ||
+          empty($srlab['speciment_idIHS'])
+        ) {
+          $this->stdout(
+            "[!] Skip anomali ServiceRequest/Specimen: " .
+              "SR: " .
+              ($srlab['servicerequest_idIHS'] ?? '-') .
+              ", Specimen: " .
+              ($srlab['speciment_idIHS'] ?? '-') .
+              ", Encounter: " .
+              ($srlab['encounter_idIHS'] ?? '-') .
+              ", RM: {$srrm}, tanggal: {$tgl_param}\n"
+          );
+
+          continue;
+        }
+
+        $obsLabs =
+          SshtApiQueryMapping::getObservationLabLocalRanap(
+            $srlab['sr_code'],
+            $srlab['lokal_sampleID_testID']
+          );
+
+        if (!$obsLabs) {
+          $this->stdout(
+            "[!] Skip: tydac ditemukan data Hasil " .
+              "Observasi lab Rm: {$srrm}, " .
+              "tanggal {$tgl_param}\n"
+          );
+          continue;
+        }
+
+        $this->sendLabObservations(
+          tgl_param: $tgl_param,
+          srlab: $srlab,
+          obsLabs: $obsLabs
+        );
+      }
+    } catch (Exception $e) {
+      $this->stdout(
+        "[CRITICAL] " . $e->getMessage() . "\n"
+      );
+    }
+  }
+
   public function sendLabRalanSingle(
     string $tgl_param,
     string $rm

@@ -43,7 +43,11 @@ class SshtImagingStudyService
    */
   public function sendRanap(string $tgl_param): void
   {
-    // Belom...
+    $this->send(
+      tgl_param: $tgl_param,
+      encounterClass: 'IMP',
+      label: 'Ranap'
+    );
   }
 
   /**

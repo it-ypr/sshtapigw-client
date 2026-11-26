@@ -1516,13 +1516,13 @@ class SshtEncounterService
           'inprogress_end' =>
           $record['inprogress_end'],
 
-          'finish_start' =>
-          $record['finish_start']
-            ?? $record['inprogress_end'],
+          'finish_start' => isset($record['finish_start'])
+            ? $record['finish_start']
+            : $record['inprogress_end'],
 
-          'finish_end' =>
-          $record['finish_end']
-            ?? $record['inprogress_end'],
+          'finish_end' => isset($record['finish_end'])
+            ? $record['finish_end']
+            : $record['inprogress_end'],
 
           'class' => $encData['class'],
         ];
@@ -1558,8 +1558,10 @@ class SshtEncounterService
           true
         );
 
+        $resEncDataPrint = $resFinish['data'] ?? [];
+
         echo "\nResponse Encounter Finish:\n";
-        print_r($resFinish);
+        print_r($resEncDataPrint);
 
         // =====================================================
         // SAVE RESULT
@@ -1575,16 +1577,15 @@ class SshtEncounterService
             ->update(
               'ssht_encounter',
               [
-                'finish_start' =>
-                $resFinish['data']['finish_start']
+                'finish_start' => $resFinish['data']['finish_start']
                   ?? $record['finish_start'],
 
-                'finish_end' =>
-                $resFinish['data']['finish_end']
+                'finish_end' => $resFinish['data']['finish_end']
                   ?? $record['finish_end'],
 
-                'updated_at' =>
-                date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+
+                'status' => $resFinish['data']['status'],
               ],
               [
                 'idIHS' => $encounterIhsId,
@@ -1607,6 +1608,541 @@ class SshtEncounterService
 
     echo "\n--- TASK DONE ---\n";
   }
+
+  public function sendFinishRalanLocalRank(
+    string $tgl_param
+  ): void {
+    $classEnc = 'AMB';
+
+    echo "--- TASK SSHT EncounterFinish [RALAN] (LOCAL RANK) START: {$tgl_param} ---\n";
+
+    $encounters = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'subject_nama',
+        'practition_lokalid',
+        'practition_idIHS',
+        'practition_nama',
+        'location_idIHS',
+        'location_nama',
+        'arrived_start',
+        'arrived_end',
+        'inprogress_start',
+        'inprogress_end',
+        'finish_start',
+        'finish_end',
+        'class',
+      ])
+      ->from('ssht_encounter')
+      ->where([
+        'like',
+        'arrived_start',
+        $tgl_param . '%',
+        false,
+      ])
+      ->andWhere([
+        'class' => $classEnc,
+      ])
+      ->all($this->dbLocal);
+
+    if (empty($encounters)) {
+      echo "SKIP: Tidak ada encounter AMB untuk tanggal {$tgl_param}\n";
+    }
+
+    foreach ($encounters as $record) {
+
+      try {
+
+        // =====================================================
+        // GET ENCOUNTER
+        // =====================================================
+
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_GET
+          ),
+          payload: $record['idIHS'],
+        )) {
+          continue;
+        }
+
+        $resEncReq = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_GET,
+          [
+            'query' => [
+              'id' => $record['idIHS'],
+            ],
+          ]
+        );
+
+        $resEnc = json_decode(
+          (string) $resEncReq->getBody(),
+          true
+        );
+
+        print_r($resEnc);
+
+        if (
+          $resEncReq->getStatusCode() != 200 ||
+          ($resEnc['status'] ?? 'false') !== 'true'
+        ) {
+          continue;
+        }
+
+        $encData = $resEnc['data'];
+        $encounterIhsId = $encData['idIHS'];
+
+        // =====================================================
+        // GET CONDITION LOCAL
+        // =====================================================
+
+        $getConditionLocal = (new Query())
+          ->select([
+            'condition_idIHS',
+            'encounter_idIHS',
+            'code',
+            'display',
+            'conditionRank',
+          ])
+          ->from('ssht_condition')
+          ->where([
+            'encounter_idIHS' => $encounterIhsId,
+          ])
+          ->andWhere(['not', ['conditionRank' => null]])
+          ->orderBy(
+            'CAST(conditionRank AS UNSIGNED) ASC'
+          )
+          ->all($this->dbLocal);
+
+        // =====================================================
+        // BUILD DIAGNOSIS
+        // =====================================================
+
+        $diagnosis = array_map(
+          function ($item) {
+            return [
+              'condition_idIHS' =>
+              $item['condition_idIHS'],
+
+              'code' =>
+              $item['code'],
+
+              'display' =>
+              $item['display'],
+
+              'conditionRank' =>
+              (string) $item['conditionRank'],
+            ];
+          },
+          $getConditionLocal
+        );
+
+        echo "\nDiagnosis (LOCAL RANK):\n";
+        print_r($diagnosis);
+
+        // =====================================================
+        // BUILD FINISH PAYLOAD
+        // =====================================================
+
+        $payloadEncounterFinish = [
+          'encounter_idIHS' => $encounterIhsId,
+
+          'rm' => $record['subject_rm'],
+          'patient_idIHS' => $record['subject_idIHS'],
+          'patient_nama' => $record['subject_nama'],
+
+          'practition_idIHS' =>
+          $record['practition_idIHS'],
+
+          'practition_nama' =>
+          $record['practition_nama'],
+
+          'location_idIHS' =>
+          $record['location_idIHS'],
+
+          'location_nama' =>
+          $record['location_nama'],
+
+          'diagnosis' => $diagnosis,
+
+          'arrived_start' =>
+          $record['arrived_start'],
+
+          'arrived_end' =>
+          $record['arrived_end'],
+
+          'inprogress_start' =>
+          $record['inprogress_start'],
+
+          'inprogress_end' =>
+          $record['inprogress_end'],
+
+          'finish_start' => isset($record['finish_start'])
+            ? $record['finish_start']
+            : $record['inprogress_end'],
+
+          'finish_end' => isset($record['finish_end'])
+            ? $record['finish_end']
+            : $record['inprogress_end'],
+
+          'class' => $encData['class'],
+        ];
+
+        print_r($payloadEncounterFinish);
+
+        // =====================================================
+        // DEBUG
+        // =====================================================
+
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_FINISH
+          ),
+          payload: $payloadEncounterFinish,
+        )) {
+          continue;
+        }
+
+        // =====================================================
+        // SEND FINISH
+        // =====================================================
+
+        $encounterFinish = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_FINISH,
+          [
+            'json' => $payloadEncounterFinish,
+          ]
+        );
+
+        $resFinish = json_decode(
+          (string) $encounterFinish->getBody(),
+          true
+        );
+
+        $resEncDataPrint = $resFinish['data'] ?? [];
+
+        echo "\nResponse Encounter Finish:\n";
+        print_r($resEncDataPrint);
+
+        // =====================================================
+        // SAVE RESULT
+        // =====================================================
+
+        if (
+          $encounterFinish->getStatusCode() == 200 ||
+          $encounterFinish->getStatusCode() == 201
+        ) {
+
+          $this->dbLocal
+            ->createCommand()
+            ->update(
+              'ssht_encounter',
+              [
+                'finish_start' => $resFinish['data']['finish_start']
+                  ?? $record['finish_start'],
+
+                'finish_end' => $resFinish['data']['finish_end']
+                  ?? $record['finish_end'],
+
+                'updated_at' => date('Y-m-d H:i:s'),
+
+                'status' => $resFinish['data']['status'],
+              ],
+              [
+                'idIHS' => $encounterIhsId,
+              ]
+            )
+            ->execute();
+
+          echo "SUCCESS ENCOUNTER FINISH: {$encounterIhsId}\n";
+        } else {
+
+          echo "FAILED ENCOUNTER FINISH\n";
+        }
+      } catch (\Throwable $e) {
+
+        echo "ERROR: {$e->getMessage()}\n";
+      }
+
+      sleep(2);
+    }
+
+    echo "\n--- TASK DONE ---\n";
+  }
+
+  public function sendFinishUgdLocalRank(
+    string $tgl_param
+  ): void {
+    $classEnc = 'EMER';
+
+    echo "--- TASK SSHT EncounterFinish [UGD] (LOCAL RANK) START: {$tgl_param} ---\n";
+
+    $encounters = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'subject_nama',
+        'practition_lokalid',
+        'practition_idIHS',
+        'practition_nama',
+        'location_idIHS',
+        'location_nama',
+        'arrived_start',
+        'arrived_end',
+        'triaged_start',
+        'triaged_end',
+        'inprogress_start',
+        'inprogress_end',
+        'finish_start',
+        'finish_end',
+        'class',
+      ])
+      ->from('ssht_encounter')
+      ->where([
+        'like',
+        'arrived_start',
+        $tgl_param . '%',
+        false,
+      ])
+      ->andWhere([
+        'class' => $classEnc,
+      ])
+      ->all($this->dbLocal);
+
+    if (empty($encounters)) {
+      echo "SKIP: Tidak ada encounter EMER untuk tanggal {$tgl_param}\n";
+    }
+
+    foreach ($encounters as $record) {
+
+      try {
+
+        // =====================================================
+        // GET ENCOUNTER
+        // =====================================================
+
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_GET
+          ),
+          payload: $record['idIHS'],
+        )) {
+          continue;
+        }
+
+        $resEncReq = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_GET,
+          [
+            'query' => [
+              'id' => $record['idIHS'],
+            ],
+          ]
+        );
+
+        $resEnc = json_decode(
+          (string) $resEncReq->getBody(),
+          true
+        );
+
+        print_r($resEnc);
+
+        if (
+          $resEncReq->getStatusCode() != 200 ||
+          ($resEnc['status'] ?? 'false') !== 'true'
+        ) {
+          continue;
+        }
+
+        $encData = $resEnc['data'];
+        $encounterIhsId = $encData['idIHS'];
+
+        // =====================================================
+        // GET CONDITION LOCAL
+        // =====================================================
+
+        $getConditionLocal = (new Query())
+          ->select([
+            'condition_idIHS',
+            'encounter_idIHS',
+            'code',
+            'display',
+            'conditionRank',
+          ])
+          ->from('ssht_condition')
+          ->where([
+            'encounter_idIHS' => $encounterIhsId,
+          ])
+          ->andWhere(['not', ['conditionRank' => null]])
+          ->orderBy(
+            'CAST(conditionRank AS UNSIGNED) ASC'
+          )
+          ->all($this->dbLocal);
+
+        // =====================================================
+        // BUILD DIAGNOSIS
+        // =====================================================
+
+        $diagnosis = array_map(
+          function ($item) {
+            return [
+              'condition_idIHS' =>
+              $item['condition_idIHS'],
+
+              'code' =>
+              $item['code'],
+
+              'display' =>
+              $item['display'],
+
+              'conditionRank' =>
+              (string) $item['conditionRank'],
+            ];
+          },
+          $getConditionLocal
+        );
+
+        echo "\nDiagnosis (LOCAL RANK):\n";
+        print_r($diagnosis);
+
+        // =====================================================
+        // BUILD FINISH PAYLOAD
+        // =====================================================
+
+        $payloadEncounterFinish = [
+          'encounter_idIHS' => $encounterIhsId,
+
+          'rm' => $record['subject_rm'],
+          'patient_idIHS' => $record['subject_idIHS'],
+          'patient_nama' => $record['subject_nama'],
+
+          'practition_idIHS' =>
+          $record['practition_idIHS'],
+
+          'practition_nama' =>
+          $record['practition_nama'],
+
+          'location_idIHS' =>
+          $record['location_idIHS'],
+
+          'location_nama' =>
+          $record['location_nama'],
+
+          'diagnosis' => $diagnosis,
+
+          'arrived_start' =>
+          $record['arrived_start'],
+
+          'arrived_end' =>
+          $record['arrived_end'],
+
+          'triaged_start' =>
+          $record['triaged_start'],
+
+          'triaged_end' =>
+          $record['triaged_end'],
+
+          'inprogress_start' =>
+          $record['inprogress_start'],
+
+          'inprogress_end' =>
+          $record['inprogress_end'],
+
+          'finish_start' => isset($record['finish_start'])
+            ? $record['finish_start']
+            : $record['inprogress_end'],
+
+          'finish_end' => isset($record['finish_end'])
+            ? $record['finish_end']
+            : $record['inprogress_end'],
+
+          'class' => $encData['class'],
+        ];
+
+        print_r($payloadEncounterFinish);
+
+        // =====================================================
+        // DEBUG
+        // =====================================================
+
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::ENCOUNTER_FINISH
+          ),
+          payload: $payloadEncounterFinish,
+        )) {
+          continue;
+        }
+
+        // =====================================================
+        // SEND FINISH
+        // =====================================================
+
+        $encounterFinish = SshtApiBase::request(
+          SshtApiUrl::ENCOUNTER_FINISH,
+          [
+            'json' => $payloadEncounterFinish,
+          ]
+        );
+
+        $resFinish = json_decode(
+          (string) $encounterFinish->getBody(),
+          true
+        );
+
+        $resEncDataPrint = $resFinish['data'] ?? [];
+
+        echo "\nResponse Encounter Finish:\n";
+        print_r($resEncDataPrint);
+
+        // =====================================================
+        // SAVE RESULT
+        // =====================================================
+
+        if (
+          $encounterFinish->getStatusCode() == 200 ||
+          $encounterFinish->getStatusCode() == 201
+        ) {
+
+          $this->dbLocal
+            ->createCommand()
+            ->update(
+              'ssht_encounter',
+              [
+                'finish_start' => $resFinish['data']['finish_start']
+                  ?? $record['finish_start'],
+
+                'finish_end' => $resFinish['data']['finish_end']
+                  ?? $record['finish_end'],
+
+                'updated_at' => date('Y-m-d H:i:s'),
+
+                'status' => $resFinish['data']['status'],
+              ],
+              [
+                'idIHS' => $encounterIhsId,
+              ]
+            )
+            ->execute();
+
+          echo "SUCCESS ENCOUNTER FINISH: {$encounterIhsId}\n";
+        } else {
+
+          echo "FAILED ENCOUNTER FINISH\n";
+        }
+      } catch (\Throwable $e) {
+
+        echo "ERROR: {$e->getMessage()}\n";
+      }
+
+      sleep(2);
+    }
+
+    echo "\n--- TASK DONE ---\n";
+  }
+
 
   public function sendFinishRanap(string $tgl_param): void
   {

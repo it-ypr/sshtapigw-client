@@ -443,6 +443,208 @@ class SshtServiceRequestService
     }
   }
 
+  /**
+   * Run Cron:
+   * php yii ssht-api-client/send-service-request-radio-ranap 2026-05-01
+   */
+  public function sendRadioRanap(string $tgl_param): void
+  {
+    $class = 'IMP';
+
+    echo "--- TASK SSHT ServiceRequest Radio (RANAP): [{$tgl_param}] ---\n";
+
+    try {
+      // 1. Ambil data encounter dari DB Lokal
+      $encounters = (new Query())
+        ->select([
+          'idIHS',
+          'subject_rm',
+          'subject_idIHS',
+          'practition_idIHS',
+          'inprogress_start',
+          'class',
+          'noregis',
+        ])
+        ->from('ssht_encounter')
+        ->where([
+          'CAST(inprogress_start AS DATE)' => $tgl_param,
+        ])
+        ->andWhere([
+          'class' => $class,
+        ])
+        ->all($this->dbLocal);
+
+      if (empty($encounters)) {
+        $this->stdout(
+          "[!] Tydac ada data encounter tanggal {$tgl_param}\n"
+        );
+
+        return;
+      }
+
+      foreach ($encounters as $enc) {
+        $rm = $enc['subject_rm'];
+
+        // 2. Cari detail order radiologi di SIMRS
+        $simrs = SshtApiQueryMapping::queryServiceRequestSimrsRadio(
+          'IMP',
+          $rm,
+          $tgl_param,
+          $enc['noregis']
+        );
+
+        if (!$simrs) {
+          $this->stdout(
+            "[-] SKIP: RM {$rm} tydac ada order radiologi\n"
+          );
+
+          continue;
+        }
+
+        // 3. Guard duplicate ServiceRequest RANAP
+        $hourStart = date(
+          'Y-m-d H:00:00',
+          strtotime($enc['inprogress_start'])
+        );
+
+        $hourEnd = date(
+          'Y-m-d H:00:00',
+          strtotime(
+            $enc['inprogress_start'] . ' +1 hour'
+          )
+        );
+
+        $duplicateServiceRequestRadioUgd =
+          $this->dbLocal->createCommand("
+            SELECT ssht_servicerequest.servicerequest_idIHS
+            FROM ssht_servicerequest
+            LEFT JOIN ssht_encounter on ssht_servicerequest.encounter_idIHS = ssht_encounter.idIHS 
+            WHERE patient_idIHS = :subject_idIHS
+              AND ssht_servicerequest.encounter_idIHS = :encounter_idIHS
+              AND ssht_servicerequest.petugas_idIHS = :petugas_idIHS
+              AND ssht_servicerequest.dokter_request_idIHS = :dokter_request_idIHS
+              AND ssht_servicerequest.code = :loinc_code
+              AND ssht_servicerequest.category_display = 'Imaging'
+              AND ssht_servicerequest.acsn = :acsn
+              AND ssht_servicerequest.date >= :hour_start
+              AND ssht_servicerequest.date < :hour_end
+              AND ssht_encounter.class = 'IMP'
+            LIMIT 1
+          ")
+          ->bindValues([
+            ':subject_idIHS' => $enc['subject_idIHS'] ?? null,
+
+            ':encounter_idIHS' => $enc['idIHS'],
+
+            ':petugas_idIHS' => $simrs['petugas_ihs'] ?? null,
+
+            ':dokter_request_idIHS' => $enc['practition_idIHS'] ?? null,
+
+            ':loinc_code' => $simrs['loinc'] ?? null,
+
+            ':acsn' => $simrs['noradio'],
+
+            ':hour_start' => $hourStart,
+
+            ':hour_end' => $hourEnd,
+          ])
+          ->queryScalar();
+
+        if ($duplicateServiceRequestRadioUgd) {
+          $this->stdout(
+            " SKIPPED "
+              . "(DUPLICATE ServiceRequest Radio - RANAP)"
+          );
+
+          $this->stdout(
+            " [IHS: {$duplicateServiceRequestRadioUgd}]"
+          );
+
+          $this->stdout(
+            " [{$hourStart}]\n"
+          );
+
+          continue;
+        }
+
+        // 4. Persiapkan payload
+        $payload = [
+          'noradio' => $simrs['noradio'],
+          'tagging' => $simrs['kode'],
+          'loinc' => $simrs['loinc'] ?? '',
+          'category' => 'radio',
+          'reason' => $simrs['indikasi']
+            ?? 'Permintaan Radiologi',
+          'encounter_idIHS' => $enc['idIHS'],
+          'dokter' => trim($simrs['dkirim']),
+          'rm' => $rm,
+          'petugas_idIHS' => $simrs['petugas_ihs'] ?? '',
+          'petugas_nama' => trim($simrs['nm_user'] ?? ''),
+        ];
+
+        // 5. Debug
+        if (!$this->debugger->allow(
+          context: SshtApiUtil::genDebugContext(
+            SshtApiUrl::SERVICE_REQUEST_CREATE_RAD
+          ),
+          payload: $payload,
+        )) {
+          continue;
+        }
+
+        // 6. Kirim ke SATUSEHAT
+        $response = SshtApiBase::request(
+          SshtApiUrl::SERVICE_REQUEST_CREATE_RAD,
+          ['json' => $payload]
+        );
+
+        $result = json_decode(
+          (string) $response->getBody(),
+          true
+        );
+
+        // 7. Simpan hasil
+        if (
+          isset($result['status'])
+          && (
+            $result['status'] == 'true'
+            || $result['status'] === true
+          )
+        ) {
+          $data_api = $result['data'] ?? [];
+
+          $sr_id_ihs =
+            $data_api['servicerequest_idIHS'] ?? null;
+
+          if ($sr_id_ihs) {
+            $this->saveServiceRequest(
+              $data_api,
+              $payload,
+              $enc,
+              $rm
+            );
+
+            $this->stdout(
+              "[OK] RM: {$rm} | SR_ID: {$sr_id_ihs}\n"
+            );
+          }
+        } else {
+          $errMsg = $result['error'] ?? 'Unknown Error';
+
+          $this->stdout(
+            "[ERR] RM: {$rm} | "
+              . Json::encode($errMsg)
+              . "\n"
+          );
+        }
+      }
+    } catch (Exception $e) {
+      $this->stdout(
+        "[CRITICAL] " . $e->getMessage() . "\n"
+      );
+    }
+  }
+
   public function sendLabRalan(string $tgl_param): void
   {
     echo "--- TASK SSHT ServiceRequest & Specimen Lab (Ralan): [{$tgl_param}] ---\n";
@@ -450,6 +652,30 @@ class SshtServiceRequestService
     $encounters = $this->getLabEncounters(
       tgl_param: $tgl_param,
       encounterClass: 'AMB'
+    );
+
+    if (empty($encounters)) {
+      $this->stdout(
+        "[!] Tydac ada data encounter tanggal {$tgl_param}\n"
+      );
+      return;
+    }
+
+    foreach ($encounters as $enc) {
+      $this->sendLabForEncounter(
+        tgl_param: $tgl_param,
+        enc: $enc
+      );
+    }
+  }
+
+  public function sendLabRanap(string $tgl_param): void
+  {
+    echo "--- TASK SSHT ServiceRequest & Specimen Lab (RANAP): [{$tgl_param}] ---\n";
+
+    $encounters = $this->getLabEncounters(
+      tgl_param: $tgl_param,
+      encounterClass: 'IMP'
     );
 
     if (empty($encounters)) {
@@ -503,6 +729,7 @@ class SshtServiceRequestService
         'inprogress_start',
         'inprogress_end',
         'class',
+        'noregis',
       ])
       ->from('ssht_encounter')
       ->where([
@@ -517,6 +744,7 @@ class SshtServiceRequestService
     array $enc
   ): void {
     $rm = $enc['subject_rm'];
+    $noregis = isset($enc['noregis']) ? $enc['noregis'] : '';
 
     $dataLab = match ($enc['class']) {
       'AMB' => SshtApiQueryMapping::queryLabRalan(
@@ -527,6 +755,12 @@ class SshtServiceRequestService
       'EMER' => SshtApiQueryMapping::queryLabUgd(
         $tgl_param,
         $rm
+      ),
+
+      'IMP' => SshtApiQueryMapping::queryLabRanap(
+        tanggal: $tgl_param,
+        rm: $rm,
+        noregis: $noregis,
       ),
 
       default => null,
