@@ -2,6 +2,7 @@
 
 namespace common\services\SshtApiGwClient\console;
 
+use common\services\SshtApiGwClient\extensions\resources\SshtConditionService;
 use common\services\SshtApiGwClient\extensions\resources\SshtDiagnosticReportService;
 use common\services\SshtApiGwClient\extensions\resources\SshtEncounterService;
 use common\services\SshtApiGwClient\extensions\resources\SshtImagingStudyService;
@@ -38,8 +39,13 @@ class SshtApiClientController extends Controller
    */
   public function actionSendTaskRalan(string $tgl_param)
   {
-    // encounter & diagnosa
+    // // encounter & diagnosa
     $this->actionSendEncounterRalan($tgl_param);
+    // fix null value on ssht_condition.conditionRank (rank by local rank/id order) [untuk fix datal rapel old]
+    // (new SshtConditionService())->fixConditionRalanRankNullByLocalRowRank($tgl_param);
+    // sleep(5);
+    // encounter finish
+    // $this->actionSendEncounterFinishRalanLocalRank($tgl_param);
     // observasi vital
     $this->actionSendObservationRalan($tgl_param);
     // general procedure
@@ -50,20 +56,20 @@ class SshtApiClientController extends Controller
     $this->actionSendImagingStudyRalan($tgl_param);
     // observation & diagnosticReport Radiologi
     $this->actionSendObservationDanDiagnosticReportRadioRalan($tgl_param);
-    // medicationRequest & medicationDispense (inprogress)
-    $this->actionGenerateMedicationRequestRalan($tgl_param);
-    // send medicationRequest manual (CLI/command prompt):
-    // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
-    // send medicationRequest via cron:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
-    // send medicationRequest via cron with print logs:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan >> /home/psidev/apps/logs/medication-request-$(date +\%Y-\%m-\%d).log 2>&1'
-    // send medicationDispense manual (CLI/command prompt):
-    // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
-    // send medicationDispense on cron:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
-    // send medicationDispense on cron with print logs:
-    // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
+    // // medicationRequest & medicationDispense (inprogress)
+    // // $this->actionGenerateMedicationRequestRalan($tgl_param);
+    // // send medicationRequest manual (CLI/command prompt):
+    // // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
+    // // send medicationRequest via cron:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // // send medicationRequest via cron with print logs:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan >> /home/psidev/apps/logs/medication-request-$(date +\%Y-\%m-\%d).log 2>&1'
+    // // send medicationDispense manual (CLI/command prompt):
+    // // 15 * * * * php yii ssht-api-client/task-send-medication-dispense-ralan
+    // // send medicationDispense on cron:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-request-ralan 2>&1'
+    // // send medicationDispense on cron with print logs:
+    // // 15 * * * * /bin/bash -lc 'cd /var/www/{direktori-simrs} && /usr/bin/php yii ssht-api-client/task-send-medication-dispense-ralan >> /home/psidev/apps/logs/medication-dispense-$(date +\%Y-\%m-\%d).log 2>&1'
     // Lab - ServiceRequest & Speciment
     $this->actionSendServiceRequestAndSpecimentLabRalan($tgl_param);
     // Lab - Observation & DiagnosticReport (on-testing)
@@ -71,7 +77,8 @@ class SshtApiClientController extends Controller
     $this->actionSendObservationLabRalan($tgl_param);
     // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
     $this->actionSendDiagnosticReportLabRalan($tgl_param);
-    // EncounterFinish (inprogress)
+    // // EncounterFinish (inprogress)
+    $this->actionSendEncounterFinishRalanLocalRank($tgl_param);
   }
 
   /**
@@ -82,23 +89,27 @@ class SshtApiClientController extends Controller
     // // RANAP - inprogress 
     // // // encounter & diagnosa
     $this->actionSendEncounterRanap($tgl_param);
+    // // // observasi vital
+    $this->actionSendObservationRanap($tgl_param);
+    // // // general procedure
+    $this->actionSendProcedureGeneralRanap($tgl_param);
+    // // // serviceRequest Radiologi
+    $this->actionSendServiceRequestRadioRanap($tgl_param);
+    // // imagingStudy
+    $this->actionSendImagingStudyRanap($tgl_param);
+    // // observation & diagnosticReport Radiologi
+    $this->actionSendObservationDanDiagnosticReportRadioRanap($tgl_param);
+    // // medicationRequest & medicationDispense (inprogress)
+    // // // Lab - ServiceRequest & Speciment
+    $this->actionSendServiceRequestAndSpecimentLabRanap($tgl_param);
+    // // // Lab - Observation & DiagnosticReport (on-testing)
+    // // // Observation Lab - saat ini baru untuk tipe panel Quantitative contoh: darah rutin
+    $this->actionSendObservationLabRanap($tgl_param);
+    // // // DiagnosticReport - alur 1 serviceRequest -> 1 DiagnosticReport menyesuaikan ssht..
+    $this->actionSendDiagnosticReportLabRanap($tgl_param);
+    // EncounterFinish (inprogress)
     // // encounter finish
     $this->actionSendEncounterFinishRanap($tgl_param);
-    // // observasi vital
-    $this->actionSendObservationRanap($tgl_param);
-    // // general procedure
-    $this->actionSendProcedureGeneralRanap($tgl_param);
-    // // serviceRequest Radiologi
-    // $this->actionSendServiceRequestRadio($tgl_param);
-    // // imagingStudy
-    // $this->actionSendImagingStudy($tgl_param);
-    // // observation & diagnosticReport Radiologi
-    // $this->actionSendObservationDanDiagnosticReportRadio($tgl_param);
-    // medicationRequest & medicationDispense (inprogress)
-    // Lab - ServiceRequest (inprogress)
-    // Lab - Speciment (inprogress)
-    // Lab - Observation & DiagnosticReport (inprogress)
-    // EncounterFinish (inprogress)
   }
 
   /**
@@ -109,6 +120,8 @@ class SshtApiClientController extends Controller
     // // UGD - inprogress 
     // // encounter & diagnosa
     $this->actionSendEncounterUgd($tgl_param);
+    // encounter finish
+    $this->actionSendEncounterFinishUgdLocalRank($tgl_param);
     // // // // observasi vital
     $this->actionSendObservationUgd($tgl_param);
     // // // // general procedure
@@ -120,7 +133,7 @@ class SshtApiClientController extends Controller
     // // observation & diagnosticReport Radiologi
     $this->actionSendObservationDanDiagnosticReportRadioUgd($tgl_param);
     // // medicationRequest & medicationDispense (inprogress)
-    $this->actionGenerateMedicationRequestUgd($tgl_param);
+    // $this->actionGenerateMedicationRequestUgd($tgl_param);
     // // send medicationRequest manual (CLI/command prompt):
     // // 15 * * * * php yii ssht-api-client/task-send-medication-request-ralan
     // // send medicationRequest via cron:
@@ -192,8 +205,33 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * Run:
+   * php yii ssht-api-client/send-encounter-finish-ralan-local-rank 2026-05-01
+   *
+   * Menggunakan conditionRank dari tabel ssht_condition.
+   * Tidak membaca ulang diagnosis dari SIMRS.
+   */
+  public function actionSendEncounterFinishRalanLocalRank($tgl_param)
+  {
+    (new SshtEncounterService())->sendFinishRalanLocalRank($tgl_param);
+  }
+
+  /**
+   * Run:
+   * php yii ssht-api-client/send-encounter-finish-ugd-local-rank 2026-05-01
+   *
+   * Menggunakan conditionRank dari tabel ssht_condition.
+   * Tidak membaca ulang diagnosis dari SIMRS.
+   */
+  public function actionSendEncounterFinishUgdLocalRank($tgl_param)
+  {
+    (new SshtEncounterService())->sendFinishUgdLocalRank($tgl_param);
+  }
+
+  /**
    * Run Cron: php yii ssht-api-client/send-encounter-finish-ranap 2026-05-01
    *
+   * menggunakan local rank
    * param: tgl_param = tgl_masuk pasien
    */
   public function actionSendEncounterFinishRanap($tgl_param)
@@ -248,6 +286,15 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * Run Cron: php yii ssht-api-client/send-observation-lab-ranap 2026-05-01
+   */
+  public function actionSendObservationLabRanap(string $tgl_param)
+  {
+    (new SshtObservationService())->sendLabRanap($tgl_param);
+  }
+
+
+  /**
    * Run: php yii ssht-api-client/send-diagnostic-report-lab-ralan-single 2025-09-29 rm
    */
   public function actionSendDiagnosticReportLabRalanSingle(string $tgl_param, string $rm)
@@ -272,6 +319,14 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * Run: php yii ssht-api-client/send-diagnostic-report-lab-ranap 2025-09-29
+   */
+  public function actionSendDiagnosticReportLabRanap(string $tgl_param)
+  {
+    (new SshtDiagnosticReportService())->sendLabRanap($tgl_param);
+  }
+
+  /**
    * Run Cron: php yii ssht-api-client/send-service-request-and-speciment-lab-ralan 2026-05-01
    */
   public function actionSendServiceRequestAndSpecimentLabRalan(string $tgl_param)
@@ -285,6 +340,14 @@ class SshtApiClientController extends Controller
   public function actionSendServiceRequestAndSpecimentLabUgd(string $tgl_param)
   {
     (new SshtServiceRequestService())->sendLabUgd(tgl_param: $tgl_param);
+  }
+
+  /**
+   * Run Cron: php yii ssht-api-client/send-service-request-and-speciment-lab-ralan 2026-05-01
+   */
+  public function actionSendServiceRequestAndSpecimentLabRanap(string $tgl_param)
+  {
+    (new SshtServiceRequestService())->sendLabRanap(tgl_param: $tgl_param);
   }
 
   /**
@@ -304,6 +367,14 @@ class SshtApiClientController extends Controller
   }
 
   /**
+   * Run Cron: php yii ssht-api-client/send-service-request-radio-ugd 2026-05-01
+   */
+  public function actionSendServiceRequestRadioRanap($tgl_param)
+  {
+    (new SshtServiceRequestService())->sendRadioRanap($tgl_param);
+  }
+
+  /**
    * Jalankan dengan: php yii ssht-api-client/send-imaging-study-ralan 2026-05-01
    */
   public function actionSendImagingStudyRalan($tgl_param)
@@ -316,7 +387,7 @@ class SshtApiClientController extends Controller
    */
   public function actionSendImagingStudyRanap($tgl_param)
   {
-    // (new SshtImagingStudyService())->sendRanap($tgl_param);
+    (new SshtImagingStudyService())->sendRanap($tgl_param);
   }
 
   /**
@@ -341,6 +412,14 @@ class SshtApiClientController extends Controller
   public function actionSendObservationDanDiagnosticReportRadioUgd($tgl_param)
   {
     (new SshtRadiologyResultService())->sendUgd($tgl_param);
+  }
+
+  /**
+   * php yii ssht-api-client/send-observation-dan-diagnostic-report-radio-ranap 2026-05-01
+   */
+  public function actionSendObservationDanDiagnosticReportRadioRanap($tgl_param)
+  {
+    (new SshtRadiologyResultService())->sendRanap($tgl_param);
   }
 
   /**
