@@ -502,6 +502,24 @@ class SshtApiUrl
   public const CLINICAL_IMPRESSION_CREATE = "";
   public const CLINICAL_IMPRESSION_UPDATE = "";
 
+  /**
+   * Create ClinicalImpression - case Riwayat Perjalanan Penyakit Pasien.
+   *
+   * Method: POST
+   * URL: api/v1/ssht/clinical-impres/riwayat-penyakit/create
+   * Body JSON:
+   * {
+   *  "encounter_idIHS" => "required|uuid",
+   *  "summary" => "required|string",
+   *  "rm" => "string", // rm local,
+   *  "dok" => "string", // nik dokter
+   * }
+   */
+  public const CLINICAL_IMPRESSION_RIWAYAT_PENYAKIT_CREATE = [
+    'POST',
+    'ssht/clinical-impres/riwayat-penyakit/create'
+  ];
+
   // Imunization
   /**
    * Get Imunization by imunization_idIHS.
@@ -790,6 +808,37 @@ class SshtApiUrl
   // MISC - KYC
   public const KYC_GENERATE = ["POST", "ssht/misc/kyc"];
   public const KYC_STATUS = ["POST", "ssht/misc/kyc/cek"];
+
+  // MISC - SSRME
+  /**
+   * APIs MISC for SSRME (satu sehat rme chl - consent)
+   *
+   * Method: POST
+   * URL: api/v1/ssht/misc/ssrme/chl 
+   * Body JSON:
+   * {
+   *    "patientid": "string|max:30 (required) - patientid [example: P1xxxxx]",
+   *    "patientname": "string|max:100 (required) - patientname [example: Praowo]",
+   *    "practitionerid": "string|max:20 (required) - practitionerid [example: 123xxx]",
+   *    "practitionername": "string|max:100 (required) - practitionername [example: dr.praowo]",
+   * }
+   */
+  public const SSRME_CHL = ["POST", "api/v1/ssht/misc/ssrme/chl"];
+
+  /**
+   * APIs MISC for SSRME (satu sehat rme shl - akses)
+   *
+   * Method: POST
+   * URL: api/v1/ssht/misc/ssrme/shl 
+   * Body JSON:
+   * {
+   *    "patientid": "string|max:30 (required) - patientid [example: P1xxxxx]",
+   *    "patientname": "string|max:100 (required) - patientname [example: Praowo]",
+   *    "practitionerid": "string|max:20 (required) - practitionerid [example: 123xxx]",
+   *    "practitionername": "string|max:100 (required) - practitionername [example: dr.praowo]",
+   * }
+   */
+  public const SSRME_SHL = ["POST", "api/v1/ssht/misc/ssrme/shl"];
 
   // MISC - KFA
 
