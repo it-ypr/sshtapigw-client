@@ -43,6 +43,7 @@ class PacsMigrationService
   ): array {
     $result = [
       'total_noradio' => 0,
+      // 'data_noradio' => [],
       'total_foto' => 0,
       'success' => 0,
       'failed' => 0,
@@ -74,6 +75,8 @@ class PacsMigrationService
 
     $result['total_noradio'] =
       count($noradios);
+
+    // $result['data_noradio'] = $noradios;
 
     foreach ($noradios as $noradio) {
       $this->migrateNoradio(

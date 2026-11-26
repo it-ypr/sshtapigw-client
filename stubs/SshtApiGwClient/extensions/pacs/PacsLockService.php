@@ -7,6 +7,8 @@ use Yii;
 class PacsLockService
 {
   private const PREFIX = 'ssht-pacs-noradio:';
+  private $dbLocal = Yii::$app->db;
+  // private $dbLocal = Yii::$app->db3; // -> di prin
 
   public function acquire(
     string $noradio,
@@ -14,7 +16,8 @@ class PacsLockService
   ): bool {
     $lockName = self::PREFIX . $noradio;
 
-    $result = Yii::$app->db
+    // $result = Yii::$app->db3
+    $result = $this->dbLocal
       ->createCommand(
         'SELECT GET_LOCK(:lock_name, :timeout)'
       )
@@ -29,7 +32,8 @@ class PacsLockService
   {
     $lockName = self::PREFIX . $noradio;
 
-    Yii::$app->db
+    // Yii::$app->db3
+    $this->dbLocal
       ->createCommand(
         'SELECT RELEASE_LOCK(:lock_name)'
       )
