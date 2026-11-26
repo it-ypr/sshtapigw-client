@@ -64,7 +64,8 @@ class SshtApiClientTestQueryController extends Controller
     }
 
     echo "Ditemukan " . count($dataEncounter) . " data.\n";
-    print_r($dataEncounter[0]);
+    print_r($dataEncounter);
+    // print_r($dataEncounter[0]);
   }
 
 
@@ -81,9 +82,14 @@ class SshtApiClientTestQueryController extends Controller
     }
 
     echo "Ditemukan " . count($dataEncounter) . " data.\n";
-    print_r($dataEncounter[0]);
-    print_r($dataEncounter[1]);
+    print_r($dataEncounter);
+    // print_r($dataEncounter[0]);
+    // print_r($dataEncounter[1]);
   }
+
+  // public static function actionRadioQuery() {
+  //   
+  // }
 
   /**
    * Run: php yii ssht-test-query/observation-vital-ranap xxxx 2025-05-01 xxxxx
@@ -200,6 +206,142 @@ class SshtApiClientTestQueryController extends Controller
   }
 
   /**
+   * Run: php yii ssht-test-query/service-request-radio-ranap 2025-05-01
+   */
+  public static function actionServiceRequestRadioRanap($tgl_param)
+  {
+    $class = "IMP";
+    // 1. Ambil data encounter dari DB Lokal
+    $encounters = (new Query())
+      ->select([
+        'idIHS',
+        'subject_rm',
+        'subject_idIHS',
+        'practition_idIHS',
+        'inprogress_start',
+        'class',
+        'noregis',
+      ])
+      ->from('ssht_encounter')
+      ->where([
+        'CAST(inprogress_start AS DATE)' => $tgl_param,
+      ])
+      ->andWhere([
+        'class' => $class,
+      ])
+      ->all(Yii::$app->sshtAPIdb);
+
+
+    if (empty($encounters)) {
+      echo "Data tidak ditemukan untuk tanggal $tgl_param\n";
+      // return ExitCode::OK;
+    }
+
+    echo "Ditemukan " . count($encounters) . " data.\n";
+    print_r($encounters);
+    // print_r($dataEncounter[0]);
+    // print_r($dataEncounter[1]);
+
+    foreach ($encounters as $enc) {
+      $rm = $enc['subject_rm'];
+      $noregis = $enc['noregis'];
+
+      $dataServiceRequest = SshtApiQueryMapping::queryServiceRequestSimrsRadio(
+        encounter_class: $class,
+        rm: $rm,
+        tgl_param: $tgl_param,
+        noregis: $noregis
+      );
+
+      if (!$dataServiceRequest) {
+        echo "[-] SKIP: RM {$rm} tydac ada order radiologi\n";
+
+        continue;
+      }
+
+
+      // 3. Guard duplicate ServiceRequest RANAP
+      $hourStart = date(
+        'Y-m-d H:00:00',
+        strtotime($enc['inprogress_start'])
+      );
+
+      $hourEnd = date(
+        'Y-m-d H:00:00',
+        strtotime(
+          $enc['inprogress_start'] . ' +1 hour'
+        )
+      );
+
+      $duplicateServiceRequestRadioUgd =
+        Yii::$app->sshtAPIdb->createCommand("
+            SELECT ssht_servicerequest.servicerequest_idIHS
+            FROM ssht_servicerequest
+            LEFT JOIN ssht_encounter on ssht_servicerequest.encounter_idIHS = ssht_encounter.idIHS 
+            WHERE patient_idIHS = :subject_idIHS
+              AND ssht_servicerequest.encounter_idIHS = :encounter_idIHS
+              AND ssht_servicerequest.petugas_idIHS = :petugas_idIHS
+              AND ssht_servicerequest.dokter_request_idIHS = :dokter_request_idIHS
+              AND ssht_servicerequest.code = :loinc_code
+              AND ssht_servicerequest.category_display = 'Imaging'
+              AND ssht_servicerequest.acsn = :acsn
+              AND ssht_servicerequest.date >= :hour_start
+              AND ssht_servicerequest.date < :hour_end
+              AND ssht_encounter.class = 'IMP'
+            LIMIT 1
+          ")
+        ->bindValues([
+          ':subject_idIHS' => $enc['subject_idIHS'] ?? null,
+
+          ':encounter_idIHS' => $enc['idIHS'],
+
+          ':petugas_idIHS' => $dataServiceRequest['petugas_ihs'] ?? null,
+
+          ':dokter_request_idIHS' => $enc['practition_idIHS'] ?? null,
+
+          ':loinc_code' => $dataServiceRequest['loinc'] ?? null,
+
+          ':acsn' => $dataServiceRequest['noradio'],
+
+          ':hour_start' => $hourStart,
+
+          ':hour_end' => $hourEnd,
+        ])
+        ->queryScalar();
+
+      if ($duplicateServiceRequestRadioUgd) {
+        echo " SKIPPED " . "(DUPLICATE ServiceRequest Radio - RANAP)";
+
+        echo " [IHS: {$duplicateServiceRequestRadioUgd}]";
+
+        echo " [{$hourStart}]\n";
+        continue;
+      }
+
+      // 4. Persiapkan payload
+      $payload = [
+        'noradio' => $dataServiceRequest['noradio'],
+        'tagging' => $dataServiceRequest['kode'],
+        'loinc' => $dataServiceRequest['loinc'] ?? '',
+        'category' => 'radio',
+        'reason' => $dataServiceRequest['indikasi']
+          ?? 'Permintaan Radiologi',
+        'encounter_idIHS' => $enc['idIHS'],
+        'dokter' => trim($dataServiceRequest['dkirim']),
+        'rm' => $rm,
+        'petugas_idIHS' => $dataServiceRequest['petugas_ihs'] ?? '',
+        'petugas_nama' => trim($dataServiceRequest['nm_user'] ?? ''),
+      ];
+
+      echo "\n";
+      echo Json::encode($payload);
+      echo "\n";
+
+      // endforeach
+    }
+  }
+
+  /**
    * php yii ssht-test-query/test-query-diagnostic-report-lab 2026-05-01 rm
    */
   public function actionTestQueryDiagnosticReportLab($tgl_param, $encounterClass)
@@ -312,6 +454,189 @@ class SshtApiClientTestQueryController extends Controller
 
     echo "\n========== UNCLASSIFIED ==========\n";
     print_r($grouped['unclassified']);
+
+    echo "\n========== Print Grouped ==========\n";
+    print_r($grouped);
+
+
+
+    echo "\n========== Payload ==========\n";
+
+    if (empty($grouped['items'])) {
+      print_r("empty data..");
+      return;
+    }
+
+    // INISIALISASI DI LUAR FOREACH
+    $payloadMedication = [];
+    $payloadMedicationDispense = [];
+
+    foreach ($grouped['items'] as $key => $obt) {
+
+      $medType = $obt['type'];
+
+      // Penampung ingredient per item obat
+      $ingredientRequest = [];
+      $ingredientDispense = [];
+
+      // ==========================================
+      // RACIKAN NON-DTD
+      // ==========================================
+      if ($medType === 'RACIKAN NON-DTD') {
+
+        foreach ($obt['ingredients'] as $ingKey => $ingSource) {
+
+          $ingredient = SshtApiUtil::generateIngredientNonDtd(
+            shellMed: $obt['header'],
+            itemIngredient: $ingSource
+          );
+
+          $ingredientRequest[] = $ingredient;
+          $ingredientDispense[] = $ingredient;
+        }
+
+        $shellMed = $obt['header'];
+
+        $medicationType = 'EP';
+      }
+
+      // ==========================================
+      // RACIKAN DTD
+      // ==========================================
+      elseif ($medType === 'RACIKAN DTD') {
+
+        foreach ($obt['ingredients'] as $ingKey => $ingSource) {
+
+          // MedicationRequest
+          $genIngredientDtdRequest =
+            SshtApiUtil::generateIngredientDtd(
+              medicationResource: 'medication-request',
+              shellMed: $obt['header'],
+              itemIngredient: $ingSource
+            );
+
+          // MedicationDispense
+          $genIngredientDtdDispense =
+            SshtApiUtil::generateIngredientDtd(
+              medicationResource: 'medication-dispense',
+              shellMed: $obt['header'],
+              itemIngredient: $ingSource
+            );
+
+          // Simpan SEMUA ingredient
+          if ($genIngredientDtdRequest !== null) {
+            $ingredientRequest[] = $genIngredientDtdRequest;
+          }
+
+          if ($genIngredientDtdDispense !== null) {
+            $ingredientDispense[] = $genIngredientDtdDispense;
+          }
+        }
+
+        $shellMed = $obt['header'];
+
+        $medicationType = 'SD';
+      }
+
+      // ==========================================
+      // NON RACIKAN (NC)
+      // ==========================================
+      elseif ($medType === 'NC') {
+
+        $shellMed = $obt['row'];
+
+        $ingredient = SshtApiUtil::generateIngredientNC(
+          shellMed: false,
+          itemIngredient: $obt['row']
+        );
+
+        // generateIngredientNC menghasilkan array
+        // berisi ingredient berdasarkan BZA.
+        $ingredientRequest = $ingredient ?? [];
+        $ingredientDispense = $ingredient ?? [];
+
+        $medicationType = 'NC';
+      } else {
+
+        echo "Unclassified medication type: {$medType}\n";
+        continue;
+      }
+
+      // ==========================================
+      // BASE PAYLOAD
+      // ==========================================
+
+      $basePayload = [
+        'encounter_idIHS' => '',
+
+        'patient_idIHS' => '',
+        'patient_nama' => '',
+        'rm' => '',
+        'dok' => '',
+        'practition_idIHS' => '',
+        'practition_nama' => '',
+
+        'inprogress_end' => '',
+
+        'identifier_noresep' => $obt['identifier_noresep'],
+        'identifier_noresep_index' => $obt['identifier_noresep_index'],
+
+        'local_id' => $shellMed["kode_brg"],
+
+        'kfa_form' => '',
+        'kfa_form.code' => '',
+        'kfa_form.name' => '',
+
+        'kfa_route' => '',
+        'kfa_route.code' => '',
+        'kfa_route.name' => '',
+
+        'jumlah' => $shellMed['jumlah'],
+        'kali' => $shellMed['kali'],
+        'hari' => $shellMed['hari'],
+        'aturanpakai' => SshtApiUtil::genAturanPakaiObat(
+          kali: $shellMed['kali'],
+          hari: $shellMed['hari'],
+          sediaan: $shellMed['sediaan'],
+          waktu: $shellMed['waktu'],
+        ),
+
+        'medication_type' => $medicationType,
+        'medication_category' => 'community',
+      ];
+
+      // ==========================================
+      // MEDICATION REQUEST
+      // ==========================================
+
+      $payloadMedication[$key] = array_merge(
+        $basePayload,
+        [
+          'ingredient' => $ingredientRequest,
+        ]
+      );
+
+      // ==========================================
+      // MEDICATION DISPENSE
+      // ==========================================
+
+      $payloadMedicationDispense[$key] = array_merge(
+        $basePayload,
+        [
+          'ingredient' => $ingredientDispense,
+        ]
+      );
+    }
+
+    // ==========================================
+    // PRINT HASIL DI LUAR FOREACH
+    // ==========================================
+
+    echo "\n=== payload medication-request ===\n";
+    print_r($payloadMedication);
+
+    echo "\n=== payload medication-dispense ===\n";
+    print_r($payloadMedicationDispense);
   }
 
   // /**
@@ -331,5 +656,4 @@ class SshtApiClientTestQueryController extends Controller
   //   // print_r($dataEncounter[0]);
   //   print_r($dataObat);
   // }
-
 }

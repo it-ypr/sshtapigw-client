@@ -219,6 +219,12 @@ class SshtApiUtil
       'LD0616',
     ];
 
+    // bungkus atau cangkang untuk obat racik non-dtd "EP"
+    $shellCodesNonDtd = [
+      'LD0614', // RACIKAN DRANK
+      'Z2020175', // RACIKAN POT KOSMETIK
+    ];
+
     /*
      * STEP 1.
      * Urutkan data sumber berdasarkan Id.
@@ -413,15 +419,37 @@ class SshtApiUtil
 
           $sortIds[] = (int) ($row['Id'] ?? PHP_INT_MAX);
 
-          $items[] = [
-            'type' => 'RACIKAN',
-            'header' => $row,
-            'ingredients' => $ingredients,
-            // '_sort_id' => min($sortIds),
-            '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
-          ];
 
-          continue;
+          // seperate non-dtd
+          $shellTypeNonDtd = in_array(
+            $kode,
+            $shellCodesNonDtd,
+            true
+          );
+
+          if ($shellTypeNonDtd) {
+
+            $items[] = [
+              'type' => 'RACIKAN NON-DTD',
+              'header' => $row,
+              'ingredients' => $ingredients,
+              // '_sort_id' => min($sortIds),
+              '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
+            ];
+
+            continue;
+          } else {
+
+            $items[] = [
+              'type' => 'RACIKAN DTD',
+              'header' => $row,
+              'ingredients' => $ingredients,
+              // '_sort_id' => min($sortIds),
+              '_sort_id' => (int) ($row['Id'] ?? PHP_INT_MAX),
+            ];
+
+            continue;
+          }
         }
 
         /*
@@ -438,16 +466,16 @@ class SshtApiUtil
         }
 
         /*
-     * Bahan tanpa aturan pakai menunggu shell
-     * berikutnya.
-     */
+       * Bahan tanpa aturan pakai menunggu shell
+       * berikutnya.
+       */
         $pendingIngredients[] = $row;
       }
 
       /*
-   * Bahan yang tersisa tanpa shell tidak boleh
-   * otomatis dijadikan racikan.
-   */
+       * Bahan yang tersisa tanpa shell tidak boleh
+       * otomatis dijadikan racikan.
+       */
       foreach ($pendingIngredients as $ingredient) {
         $unclassified[] = [
           'reason' => 'NO_ACTIVE_SHELL',
@@ -473,7 +501,8 @@ class SshtApiUtil
     $indexes = [];
 
     foreach ($items as &$item) {
-      $source = $item['type'] === 'RACIKAN'
+      // $source = $item['type'] === 'RACIKAN'
+      $source = str_contains($item['type'], 'RACIKAN')
         ? $item['header']
         : $item['row'];
 
@@ -514,6 +543,432 @@ class SshtApiUtil
     return [
       'items' => $items,
       'unclassified' => $unclassified,
+    ];
+  }
+
+  public static function generateIngredientNonDtd(
+    // cangkangObt
+    array $shellMed,
+    // itemIngredient (ke-n)
+    array $itemIngredient
+  ) {
+
+    print_r($shellMed);
+    print_r($itemIngredient);
+
+    $ingredientMedSimrs = SshtApiQueryMapping::getRefObatByLocalId($itemIngredient['id_local']);
+
+    $ingredients = [
+      'coding_code' => $ingredientMedSimrs['kfa_code'],
+      'coding_display' => $ingredientMedSimrs['kfa_display'],
+      // 'active' => , // bisa diset default..
+
+      'kfa_bza' => $ingredientMedSimrs['kfa_bza'],
+
+      'strength_nemunerator_value' => $itemIngredient['jumlah'],
+      'strength_nemunerator_code' => '', // tambah kolom untuk simpan drug_form unit_code
+      'strength_nemunerator_system' => '', // tambah kolom untuk simpan drug_form unit_system
+      'strength_denominator_value' => $shellMed['jumlah'],
+      'strength_denominator_code' => '', // tambah kolom untuk simpan drug_form unit_code untuk shellMed (cangkangObt)
+      'strength_denominator_system' => '', // tambah kolom untuk simpan drug_form unit_system untuk shellMed (cangkangObt)
+      'strength_denominator_unit' => '', // tambah kolom untuk simpan drug_from unit_display untuk shellMed (cangkangObt)
+    ];
+
+    return $ingredients;
+  }
+
+  // generateIngredientDtd (MedicationRequest atau MedicationDispense)
+  public static function generateIngredientDtd(
+    // flag medication (medication-request or medication-dispense)
+    string $medicationResource,
+    // cangkangObt
+    array $shellMed,
+    // itemIngredient (ke-n)
+    array $itemIngredient
+  ) {
+
+    // print_r($medicationResource);
+    // print_r($shellMed);
+    // print_r($itemIngredient);
+
+    if (
+      !in_array(
+        $medicationResource,
+        ['medication-request', 'medication-dispense'],
+        true
+      )
+    ) {
+      throw new InvalidArgumentException(
+        'Invalid medication resource: ' . $medicationResource
+      );
+    }
+
+    $ingredientMedSimrs = SshtApiQueryMapping::getRefObatByLocalId($itemIngredient['id_local']);
+
+    if (empty($ingredientMedSimrs)) {
+      throw new RuntimeException(
+        'Mapping obat tidak ditemukan: ' . $itemIngredient['id_local']
+      );
+    }
+
+    $kfa_bza = json_decode($ingredientMedSimrs['kfa_bza'], true);
+    // print_r($kfa_bza);
+
+    // generateIngredientDtd (MedicationRequest)
+    if ($medicationResource == 'medication-request') {
+      // asumsi mapping dilakukan dengan benar,
+      // obat racikan dtd biasanya komposisi tepat 1 active ingredient di bza
+      $activeIngredient = (array) $kfa_bza[0];
+
+      // print_r("masuk if generateIngredientDtd medication-request");
+      // print_r($activeIngredient["kekuatan_zat_aktif"]);
+      // exit;
+
+      $sediaan = self::parseMedicationActiveIngredient(
+        $activeIngredient["kekuatan_zat_aktif"],
+        $ingredientMedSimrs["kfa_form"]
+      );
+
+      $kekuatanZatAktif = self::hitungKandunganMedicationIngredient(
+        total: (float) $itemIngredient['jumlah'],
+        sediaan: (float) $sediaan["numerator"]["value"],
+        jumlahDispense: (float) $shellMed['jumlah']
+      );
+
+      if (!$kekuatanZatAktif["success"]) {
+        return $kekuatanZatAktif;
+      }
+
+      $kekuatanZatAktifDenom = $sediaan['denominator'];
+
+      $ingredients = [
+        // 'coding_code' => $ingredientMedSimrs['kfa_code'],
+        // 'coding_display' => $ingredientMedSimrs['kfa_display'],
+
+        'coding_code' => $activeIngredient['kfa_code'],
+        'coding_display' => $activeIngredient['zat_aktif'],
+
+        // 'active' => , // bisa diset default..
+
+        'kfa_bza' => $kfa_bza,
+
+        'strength_nemunerator_value' => $kekuatanZatAktif["data"],
+        'strength_nemunerator_code' => '', // tambah kolom untuk simpan drug_form unit_code
+        'strength_nemunerator_system' => '', // tambah kolom untuk simpan drug_form unit_system
+        // 'strength_denominator_value' => $shellMed['jumlah'],
+        'strength_denominator_value' => $kekuatanZatAktifDenom["value"],
+        'strength_denominator_code' => '', // tambah kolom untuk simpan drug_form unit_code untuk shellMed (cangkangObt)
+        'strength_denominator_system' => '', // tambah kolom untuk simpan drug_form unit_system untuk shellMed (cangkangObt)
+        'strength_denominator_unit' => '', // tambah kolom untuk simpan drug_from unit_display untuk shellMed (cangkangObt)
+      ];
+
+      // flag medication (medication-dispense)
+    } elseif ($medicationResource == 'medication-dispense') {
+      // asumsi mapping dilakukan dengan benar,
+      // obat racikan dtd biasanya komposisi tepat 1 active ingredient di bza
+      $activeIngredient = $kfa_bza[0];
+
+      // $sediaan = self::parseMedicationActiveIngredient($activeIngredient["kekuatan_zat_aktif"], $ingredientMedSimrs["kfa_form"]);
+
+      // $kekuatanZatAktif = self::hitungKandunganMedicationIngredient(
+      //   total: (float) $itemIngredient['jumlah'],
+      //   sediaan: (float) $sediaan["nemunerator"]["value"],
+      //   jumlahDispense: (float) $shellMed['jumlah']
+      // );
+
+      // if(!$kekuatanZatAktif["success"]){
+      //   return $kekuatanZatAktif;
+      // }
+
+      $ingredients = [
+        'coding_code' => $ingredientMedSimrs['kfa_code'],
+        'coding_display' => $ingredientMedSimrs['kfa_display'],
+        // 'active' => , // bisa diset default..
+
+        'kfa_bza' => $kfa_bza,
+
+        'strength_nemunerator_value' => $itemIngredient["jumlah"],
+        'strength_nemunerator_code' => '', // tambah kolom untuk simpan drug_form unit_code
+        'strength_nemunerator_system' => '', // tambah kolom untuk simpan drug_form unit_system
+        'strength_denominator_value' => $shellMed['jumlah'],
+        'strength_denominator_code' => '', // tambah kolom untuk simpan drug_form unit_code untuk shellMed (cangkangObt)
+        'strength_denominator_system' => '', // tambah kolom untuk simpan drug_form unit_system untuk shellMed (cangkangObt)
+        'strength_denominator_unit' => '', // tambah kolom untuk simpan drug_from unit_display untuk shellMed (cangkangObt)
+      ];
+      // else {
+      //   return 
+      // }
+    }
+
+    return $ingredients;
+  }
+
+  public static function generateIngredientNC(
+    // cangkangObt
+    $shellMed = false,
+    // itemIngredient (ke-n)
+    $itemIngredient
+  ) {
+
+    // print_r($shellMed);
+    // print_r($itemIngredient);
+
+    $ingredientMedSimrs = SshtApiQueryMapping::getRefObatByLocalId($itemIngredient['id_local']);
+
+    if (empty($ingredientMedSimrs)) {
+      return;
+    }
+
+    print_r("\n");
+    print_r($ingredientMedSimrs);
+
+    $bza = json_decode($ingredientMedSimrs['kfa_bza'] ?? [], true);
+    $kfa_form = json_decode($ingredientMedSimrs['kfa_form'] ?? [], true);
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($bza)) {
+      return;
+    }
+
+    $ingredientBza = [];
+
+    foreach ($bza as $row) {
+
+      $genIngredientKfa = self::parseMedicationActiveIngredient(
+        text: $row['kekuatan_zat_aktif'],
+        kfa_form_name: $kfa_form['name'],
+      );
+
+      $ingredientBza[] = [
+        'coding_code' => $ingredientMedSimrs['kfa_code'],
+        'coding_display' => $ingredientMedSimrs['kfa_display'],
+        // 'active' => , // bisa diset default..
+
+        // 'kfa_bza' => $ingredientMedSimrs['kfa_bza'],
+
+        'strength_nemunerator_value' => $genIngredientKfa['numerator']['value'],
+        'strength_nemunerator_code' => $genIngredientKfa['numerator']['code'],
+        'strength_nemunerator_system' => $genIngredientKfa['numerator']['system'],
+        'strength_denominator_value' => $genIngredientKfa['denominator']->value,
+        'strength_denominator_code' => $genIngredientKfa['denominator']->code, // tambah kolom untuk simpan drug_form unit_code untuk shellMed (cangkangObt)
+        'strength_denominator_system' => $genIngredientKfa['denominator']->system, // tambah kolom untuk simpan drug_form unit_system untuk shellMed (cangkangObt)
+        'strength_denominator_unit' => $genIngredientKfa['denominator']->unit ?? $genIngredientKfa['denominator']->code, // tambah kolom untuk simpan drug_from unit_display untuk shellMed (cangkangObt)
+      ];
+    }
+
+    $ingredients = $ingredientBza;
+
+    return $ingredients;
+  }
+
+  public static function denominatorActiveIngredient($kfa_form_name, $qty_unit = 1): object
+  {
+    $form = strtolower($kfa_form_name);
+
+    // if ($kfa_form_name == "Tablet") {
+    if (str_contains($form, 'tablet')) {
+      return (object) [
+        "value" => $qty_unit,
+        "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+        "code" => "TAB"
+        // "value" => 1,
+        // "unit" => "Tablet - unit of product usage",
+        // "system" => "http://snomed.info/sct",
+        // "code" => "428673006"
+      ];
+      // } elseif ($kfa_form_name == "Kapsul") {
+    } elseif (str_contains($form, 'kapsul')) {
+      return (object) [
+        "value" => (float) $qty_unit,
+        "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+        "code" => "CAP"
+      ];
+    } elseif ($kfa_form_name == "Serbuk Oral") {
+      return (object) [
+        "value" => (float) $qty_unit,
+        "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+        "code" => "POWD"
+      ];
+    } elseif (
+      $kfa_form_name == "Serbuk Injeksi" ||
+      $kfa_form_name == "Suspensi Injeksi" ||
+      $kfa_form_name == "Larutan Injeksi"
+    ) {
+      return (object) [
+        "value" => 1,
+        "unit" => "Vial - unit of presentation",
+        "system" => "http://snomed.info/sct",
+        "code" => "733026001"
+      ];
+      // semprot
+    } elseif ($kfa_form_name == "Supositoria") {
+      return (object) [
+        "value" => 1,
+        "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+        "code" => "SUPP"
+      ];
+      // } elseif ($kfa_form_name == "Gel" || $kfa_form_name == "Salep") {
+    } elseif ($kfa_form_name == "Gel" || str_contains($form, 'salep')) {
+      return (object) [
+        "value" => 1,
+        "unit" => "Tube - unit of presentation",
+        "system" => "http://snomed.info/sct",
+        "code" => "733024003"
+      ];
+    } elseif ($kfa_form_name == "Infus") {
+      return (object) [
+        "value" => 1,
+        "unit" => "Bottle - unit of presentation",
+        "system" => "http://snomed.info/sct",
+        "code" => "732986007"
+        // deprecated - inactive
+        // "unit" => "Bottle - unit of product usage",
+        // "system" => "http://snomed.info/sct",
+        // "code" => "419672006"
+      ];
+      // } elseif (
+      //     $kfa_form_name == "Larutan Injeksi" ||
+      //     $kfa_form_name == "Tetes Mata" ||
+      //     $kfa_form_name == "Krim" ||
+      //     $kfa_form_name == "Suspensi" ||
+      //     $kfa_form_name == "Sirup"
+      // ) {
+      //     $res = explode(' ', $qty_unit);
+      //
+      //     Log::info('res-denominator-last', ["res" => $res]);
+      //
+      //     return (object) [
+      //         "value" => (float) $res[0],
+      //         // "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+      //         "system" => "http://unitsofmeasure.org",
+      //         "code" => $res[1]
+      //     ];
+      // } else {
+      //     return (object) [
+      //         "error" => "denominator param kfa_form_name must be the valid on kfa_form"
+      //     ];
+      // }
+      // 2026-10-06 10:01 - asumsi naive semua data active ingridient sudah disediakan api kfa kemkes
+    } else {
+      $res = explode(' ', $qty_unit);
+
+      // Log::info('res-denominator-last', ["res" => $res]);
+
+      return (object) [
+        "value" => (float) $res[0],
+        // "system" => "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+        "system" => "http://unitsofmeasure.org",
+        "code" => $res[1]
+      ];
+    }
+  }
+
+
+  // Medication active ingridient
+  public static function parseMedicationActiveIngredient(string $text, string $kfa_form_name): ?array
+  {
+    // Hilangkan spasi berlebih
+    $text = trim(preg_replace('/\s+/', ' ', $text));
+
+    // Log::info('parseMedicationActiveIngredient', ["text" => $text]);
+
+    // Cocokkan pola umum UCUM
+    // if (preg_match('/([\d\.]+)\s*([A-Za-zµ\/]+)\/([\d\.]+)\s*([A-Za-zµ\/]+)/', $text, $m)) {
+    // 2026-10-07 02:25 - allow UCUM [IU]/[iU] etc..
+    if (preg_match('/^\s*([\d.,]+)\s*([^\s\/]+)\s*\/\s*([\d.,]+)\s*([^\s\/]+)\s*$/u', trim($text), $m)) {
+
+      // Log::info('preg_match_1', [
+      //   "result" => $m
+      // ]);
+
+      return [
+        "numerator" => [
+          "value" => (float)$m[1],
+          "system" => "http://unitsofmeasure.org",
+          "code"  => $m[2]
+        ],
+        "denominator" => [
+          "value" => (float)$m[3],
+          "system" => "http://unitsofmeasure.org",
+          "code"  => $m[4]
+        ]
+        // "denominator" => self::denominatorActiveIngredient(
+        //     kfa_form_name: $kfa_form_name,
+        //     qty_unit: (string) $m[3] . ' ' . $m[4]
+        // ),
+
+      ];
+    }
+
+    // fallback: kalau cuma satuan aja (misal "250 mg")
+    // if (preg_match('/([\d\.]+)\s*([A-Za-zµ\/]+)/', $text, $m)) {
+    // if (preg_match('/([\d\.]+)\s*([A-Za-z%\/]+)/', $text, $m)) {
+    if (preg_match('/([\d.,]+)\s*([^\s\/]+)/u', $text, $m)) {
+
+      // Log::info('preg_match_2', [
+      //   "result" => $m
+      // ]);
+
+      return [
+        "numerator" => [
+          "value" => (float)$m[1],
+          "system" => "http://unitsofmeasure.org",
+          "code"  => $m[2]
+        ],
+        // "denominator" => [
+        //     "value" => 1,
+        //     "system" => "http://unitsofmeasure.org",
+        //     "code"  => "1"
+        // ]
+        "denominator" => (array) self::denominatorActiveIngredient(
+          kfa_form_name: $kfa_form_name,
+          qty_unit: 1
+        ),
+      ];
+    }
+
+    // gagal parse
+    return null;
+  }
+
+  public static function hitungKandunganMedicationIngredient(
+    // local frm_ralan.jumlah
+    float $total = 0.0,
+    // kekuatan sediaan di kfa
+    float $sediaan = 0.0,
+    // jumal mau dibuat berapa unit
+    float $jumlahDispense = 0.0
+  ): array {
+
+    // print_r("\nmasuk ke hitungKandunganMedicationIngredient");
+    // print_r("\ntotal: " . $total);
+    // print_r("\nsediaan: " . $sediaan);
+    // print_r("\njumlahDispense: " . $jumlahDispense);
+    //
+    // var_dump($total);
+    // var_dump($sediaan);
+    // var_dump($jumlahDispense);
+
+    if ($jumlahDispense == 0.0) {
+      return [
+        "success" => false,
+        "error" => true,
+        "message" => "error param bernilai 0 atau tidak valid"
+      ];
+    }
+
+    // print_r("\n");
+    //
+    // var_dump((float) $total);
+    // var_dump((float) $sediaan);
+    // var_dump((float) $jumlahDispense);
+
+    $kekuatan_satu_shell = ($total * $sediaan) / $jumlahDispense;
+
+    return [
+      "success" => true,
+      "error" => false,
+      "data" => $kekuatan_satu_shell,
+      "message" => "ok"
     ];
   }
 }
