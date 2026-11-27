@@ -806,8 +806,31 @@ class SshtApiUrl
   public const CONSENT_CEK = "ssht/misc/consent";
 
   // MISC - KYC
+  /**
+   * APIs MISC for KYC (satu sehat kyc - consent)
+   *
+   * Method: POST
+   * URL: api/v1/ssht/misc/kyc
+   * Body JSON:
+   * {
+   *    "nik": "string|numeric|digits:16 (required) - nik [nik petugas]",
+   *    "nama": "string|max:100|min:1 (required) - nama [nama petugas]",
+   * }
+   */
   public const KYC_GENERATE = ["POST", "ssht/misc/kyc"];
-  public const KYC_STATUS = ["POST", "ssht/misc/kyc/cek"];
+
+  /**
+   * APIs MISC for KYC (satu sehat kyc - cek challange) [error source endpoint ssht]
+   *
+   * Method: POST
+   * URL: api/v1/ssht/misc/kyc-cek
+   * Body JSON:
+   * {
+   *    "nik": "string|numeric|digits:16 (required) - nik [nik pasien]",
+   *    "nama": "string|max:100|min:1 (required) - nama [nama pasien]",
+   * }
+   */
+  public const KYC_STATUS = ["POST", "ssht/misc/kyc-cek"];
 
   // MISC - SSRME
   /**
@@ -817,9 +840,9 @@ class SshtApiUrl
    * URL: api/v1/ssht/misc/ssrme/chl 
    * Body JSON:
    * {
-   *    "patientid": "string|max:30 (required) - patientid [example: P1xxxxx]",
+   *    "patientid": "string|max:30 (required) - patientid ssht [example: P1xxxxx]",
    *    "patientname": "string|max:100 (required) - patientname [example: Praowo]",
-   *    "practitionerid": "string|max:20 (required) - practitionerid [example: 123xxx]",
+   *    "practitionerid": "string|max:20 (required) - practitionerid ssht [example: 123xxx]",
    *    "practitionername": "string|max:100 (required) - practitionername [example: dr.praowo]",
    * }
    */
@@ -832,9 +855,9 @@ class SshtApiUrl
    * URL: api/v1/ssht/misc/ssrme/shl 
    * Body JSON:
    * {
-   *    "patientid": "string|max:30 (required) - patientid [example: P1xxxxx]",
+   *    "patientid": "string|max:30 (required) - patientid ssht [example: P1xxxxx]",
    *    "patientname": "string|max:100 (required) - patientname [example: Praowo]",
-   *    "practitionerid": "string|max:20 (required) - practitionerid [example: 123xxx]",
+   *    "practitionerid": "string|max:20 (required) - practitionerid ssht [example: 123xxx]",
    *    "practitionername": "string|max:100 (required) - practitionername [example: dr.praowo]",
    * }
    */

@@ -1243,4 +1243,118 @@ class SshtApiClientTestingController extends Controller
       }
     }
   }
+
+  /**
+   * php yii ssht-api-client-testing/test-kyc-generate $nik_petugas $nama_petugas
+   */
+  public function actionTestKycGenerate(
+    string $nik,
+    string $nama,
+  ): void {
+
+    $resKyc = SshtApiBase::request(
+      SshtApiUrl::KYC_GENERATE,
+      [
+        "json" => [
+          // nik petugas
+          "nik" => $nik,
+          // nama petugas
+          "nama" => $nama,
+        ]
+      ]
+    );
+
+    $res = json_decode(
+      (string) $resKyc->getBody(),
+      true
+    );
+
+    print_r($res);
+  }
+
+  /**
+   * php yii ssht-api-client-testing/test-kyc-cek $nik_pasien $nama_pasien
+   */
+  public function actionTestKycCek(
+    string $nik,
+    string $nama,
+  ): void {
+
+    $resKyc = SshtApiBase::request(
+      SshtApiUrl::KYC_STATUS,
+      [
+        "json" => [
+          "nik" => $nik,
+          "nama" => $nama,
+        ]
+      ]
+    );
+
+    $res = json_decode(
+      (string) $resKyc->getBody(),
+      true
+    );
+
+    print_r($res);
+  }
+
+  /**
+   * php yii ssht-api-client-testing/test-ssrme-chl $patientid $patientname $practitionerid $practitionername
+   */
+  public function actionTestSsrmeChl(
+    string $patientid,
+    string $patientname,
+    string $practitionerid,
+    string $practitionername
+  ): void {
+
+    $resKyc = SshtApiBase::request(
+      SshtApiUrl::SSRME_CHL,
+      [
+        "json" => [
+          "patientid" => $patientid,
+          "patientname" => $patientname,
+          "practitionerid" => $practitionerid,
+          "practitionername" => $practitionername,
+        ]
+      ]
+    );
+
+    $res = json_decode(
+      (string) $resKyc->getBody(),
+      true
+    );
+
+    print_r($res);
+  }
+
+  /**
+   * php yii ssht-api-client-testing/test-ssrme-shl $patientid $patientname $practitionerid $practitionername
+   */
+  public function actionTestSsrmeShl(
+    string $patientid,
+    string $patientname,
+    string $practitionerid,
+    string $practitionername
+  ): void {
+
+    $resKyc = SshtApiBase::request(
+      SshtApiUrl::SSRME_SHL,
+      [
+        "json" => [
+          "patientid" => $patientid,
+          "patientname" => $patientname,
+          "practitionerid" => $practitionerid,
+          "practitionername" => $practitionername,
+        ]
+      ]
+    );
+
+    $res = json_decode(
+      (string) $resKyc->getBody(),
+      true
+    );
+
+    print_r($res);
+  }
 }
